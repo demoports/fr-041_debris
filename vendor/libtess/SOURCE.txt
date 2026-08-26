@@ -1,0 +1,23 @@
+libtess.js 1.2.2
+
+Upstream repository:
+https://github.com/brendankenny/libtess.js
+
+Pinned tag:
+1.2.2
+
+Pinned commit:
+f88246ee473984be763dc09de492755e6c55b71f
+
+Vendored source:
+libtess.min.js
+
+Upstream source SHA-256:
+e3da69c04ba623eb870151f9958dd8f83bc5cd40b97fdd641ee754c9f9f43b2b
+
+The upstream browser build is preserved verbatim inside src/libtess.js.
+That file invokes the UMD payload with a private receiver, then exports the
+captured API as a native ES module without creating a browser global.
+
+License:
+SGI Free Software License B 2.0; see LICENSE.txt in this directory.

@@ -1,0 +1,182 @@
+<!doctype html>
+<html data-audio-worker-smoke="pending">
+<head><meta charset="utf-8"><title>Debris audio Worker smoke test</title></head>
+<body>
+<script type="module">
+  const root = document.documentElement;
+  const runtimeErrors = [];
+  const concise = value => String(value?.message || value || 'unknown error')
+    .replace(/\s+/g, ' ').slice(0, 400);
+  const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+  const withTimeout = (promise, milliseconds, label) => {
+    let timer = 0;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${milliseconds} ms`)), milliseconds);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  };
+
+  addEventListener('error', event => runtimeErrors.push(concise(event.error || event.message)));
+  addEventListener('unhandledrejection', event => runtimeErrors.push(concise(event.reason)));
+
+  let stream = null;
+  let capture = null;
+  let failure = null;
+  let underruns = 0;
+  const streamErrors = [];
+
+  try {
+    const { AudioStream } = await import('../src/audio.js');
+    if (typeof AudioStream !== 'function') throw new Error('AudioStream did not load');
+    const response = await fetch('../assets/debris_loader.v2m', { cache: 'no-store' });
+    if (!response.ok) throw new Error(`loader V2M fetch failed with HTTP ${response.status}`);
+    const loaderSong = new Uint8Array(await response.arrayBuffer());
+    if (!loaderSong.byteLength) throw new Error('loader V2M is empty');
+
+    stream = new AudioStream({
+      sampleRate: 44100,
+      blockFrames: 2048,
+      queueBlocks: 12,
+      tailSeconds: 0,
+      reportClock: true,
+      workerSong: loaderSong,
+      workerPlayerOptions: {
+        checkpointMemoryBytes: 0,
+        checkpointIntervalSamples: 0,
+      },
+      onUnderrun: () => { underruns++; },
+      onError: error => streamErrors.push(concise(error)),
+    });
+    await withTimeout(stream.init(), 12000, 'Worker AudioStream initialization');
+
+    if (stream.producerBackend !== 'worker') {
+      throw new Error(`expected worker backend, got ${stream.producerBackend}`);
+    }
+    if (stream.synth !== null) throw new Error('Worker AudioStream retained a main-thread synth');
+    if (!stream.producerWorker || !stream.producerChannel || !stream.workerPrepared) {
+      throw new Error('Worker AudioStream producer was not prepared and connected');
+    }
+    if (stream.workerFallbackReason) {
+      throw new Error(`Worker AudioStream fell back: ${concise(stream.workerFallbackReason)}`);
+    }
+
+    await stream.context.audioWorklet.addModule(
+      new URL('./audio_worker_capture_worklet.js', import.meta.url),
+    );
+
+    capture = new AudioWorkletNode(stream.context, 'debris-worker-smoke-capture', {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      outputChannelCount: [2],
+      channelCount: 2,
+      channelCountMode: 'explicit',
+    });
+    const snapshotWaiters = new Map();
+    let snapshotSerial = 0;
+    capture.onprocessorerror = () => streamErrors.push('capture AudioWorklet processor error');
+    capture.port.onmessage = event => {
+      const message = event.data || {};
+      if (message.type !== 'snapshot') return;
+      const resolve = snapshotWaiters.get(message.requestId);
+      snapshotWaiters.delete(message.requestId);
+      resolve?.(message);
+    };
+    const snapshot = () => {
+      const requestId = ++snapshotSerial;
+      const reply = new Promise(resolve => snapshotWaiters.set(requestId, resolve));
+      capture.port.postMessage({ type: 'snapshot', requestId });
+      return withTimeout(reply, 2000, 'output snapshot');
+    };
+
+    // Meter the real sink path without adding any synth or production work on
+    // main. The Worker continues to answer AudioWorklet fill requests while
+    // this page deliberately stops servicing its own event loop below.
+    stream.node.disconnect();
+    stream.node.connect(capture);
+    capture.connect(stream.context.destination);
+
+    await withTimeout(stream.start(), 5000, 'Worker AudioStream priming');
+    if (!stream.workerPrimed) throw new Error('Worker AudioStream did not report primed');
+    if (stream.synth !== null) throw new Error('priming created a main-thread synth');
+
+    const before = await snapshot();
+    const sampleBefore = stream.sample;
+    const contextBefore = stream.context.currentTime;
+    let spin = 0;
+    const blockStart = performance.now();
+    while (performance.now() - blockStart < 750) spin = Math.imul(spin + 1, 3) | 0;
+    const blockedMilliseconds = performance.now() - blockStart;
+    const contextAfterBlock = stream.context.currentTime;
+
+    // Let queued clock/diagnostic messages run, then read the capture state
+    // that the audio rendering thread advanced while main was blocked.
+    const after = await snapshot();
+    await delay(100);
+    const sampleAfter = stream.sample;
+    const finalCapture = await snapshot();
+    const outputFrameDelta = after.frames - before.frames;
+    const inputFrameDelta = after.inputFrames - before.inputFrames;
+
+    if (blockedMilliseconds < 700) throw new Error('main-thread block was shorter than requested');
+    if (contextAfterBlock <= contextBefore) throw new Error('AudioContext did not advance during the block');
+    if (outputFrameDelta <= 0 || inputFrameDelta <= 0) {
+      throw new Error('AudioWorklet output did not advance during the main-thread block');
+    }
+    if (sampleAfter <= sampleBefore) throw new Error('AudioStream sample clock did not advance');
+    if (!finalCapture.nonzeroFrames || !(finalCapture.peak > 0)) {
+      throw new Error('Worker-produced loader output remained silent');
+    }
+    if (finalCapture.invalid) throw new Error(`captured ${finalCapture.invalid} non-finite samples`);
+    if (underruns) throw new Error(`Worker audio reported ${underruns} underrun(s)`);
+    if (streamErrors.length) throw new Error(streamErrors.join(' | '));
+    if (runtimeErrors.length) throw new Error(runtimeErrors.join(' | '));
+    if (stream.workerError) throw new Error(`Worker failed: ${concise(stream.workerError)}`);
+    if (stream.producerBackend !== 'worker' || stream.synth !== null || !stream.workerPrimed) {
+      throw new Error('Worker ownership changed during the main-thread block');
+    }
+
+    root.dataset.audioWorkerBytes = String(loaderSong.byteLength);
+    root.dataset.audioWorkerBackend = stream.producerBackend;
+    root.dataset.audioWorkerPrimed = String(stream.workerPrimed);
+    root.dataset.audioWorkerBlockedMilliseconds = blockedMilliseconds.toFixed(1);
+    root.dataset.audioWorkerContextDelta = (contextAfterBlock - contextBefore).toFixed(6);
+    root.dataset.audioWorkerSampleBefore = String(sampleBefore);
+    root.dataset.audioWorkerSampleAfter = String(sampleAfter);
+    root.dataset.audioWorkerOutputFramesBefore = String(before.frames);
+    root.dataset.audioWorkerOutputFramesAfter = String(after.frames);
+    root.dataset.audioWorkerOutputFrameDelta = String(outputFrameDelta);
+    root.dataset.audioWorkerInputFrameDelta = String(inputFrameDelta);
+    root.dataset.audioWorkerNonzeroFrames = String(finalCapture.nonzeroFrames);
+    root.dataset.audioWorkerPeak = finalCapture.peak.toPrecision(8);
+    root.dataset.audioWorkerUnderruns = String(underruns);
+  } catch (error) {
+    failure = error;
+  } finally {
+    try { capture?.disconnect(); } catch (_) { /* already disconnected */ }
+    try { capture?.port?.close(); } catch (_) { /* already closed */ }
+    try { await stream?.close(); }
+    catch (error) { failure ||= error; }
+
+    if (!failure && stream && (
+      stream.producerWorker !== null || stream.producerChannel !== null ||
+      stream.workerPrepared || stream.workerPrimed || stream.synth !== null ||
+      stream.workerSong !== null || stream.context !== null || stream.node !== null
+    )) failure = new Error('Worker AudioStream did not release all resources on close');
+
+    root.dataset.audioWorkerClosed = String(Boolean(stream?.closed));
+    if (failure) {
+      root.dataset.audioWorkerError = concise(failure);
+      root.dataset.audioWorkerSmoke = 'error';
+      root.dataset.audioErrors = concise(failure);
+      root.dataset.audioSmoke = 'error';
+      console.error(failure);
+    } else {
+      delete root.dataset.audioWorkerError;
+      root.dataset.audioWorkerSmoke = 'ok';
+      delete root.dataset.audioErrors;
+      root.dataset.audioSmoke = 'ok';
+    }
+  }
+</script>
+</body>
+</html>

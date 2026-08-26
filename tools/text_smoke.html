@@ -1,0 +1,98 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Debris Bitmap_Text smoke</title>
+<canvas id="screen" width="512" height="512"></canvas>
+<script type="module">
+import { Bitmap_Flat, Bitmap_Text } from '../src/bitmap.js';
+import { MinMesh_Font3D } from '../src/minmesh.js';
+
+try {
+  const base = Bitmap_Flat(0x89, 9, 0xff000000);
+  const bitmap = Bitmap_Text(
+    { blob: null }, null, base,
+    0.5, 0, 0.0625, 0.031982421875, 0xffffe0c0,
+    1, 2, 0, 1,
+    'chaos.\nryg.\nkb.\nfried.\nwayfinder.\ntheunitedstatesofamerica.\ngizmo.\nfr-041.\ncode.\nvisuals.\nsoundtrack.\n',
+    '',
+  );
+  const rgba = new Uint8ClampedArray(bitmap.size * 4);
+  let changed = 0;
+  for (let pixel = 0; pixel < bitmap.size; pixel++) {
+    const source = pixel * 4;
+    for (let channel = 0; channel < 4; channel++) {
+      rgba[source + channel] = Math.round(Math.min(0x7fff, bitmap.data[source + channel]) * 255 / 0x7fff);
+    }
+    if (rgba[source] || rgba[source + 1] || rgba[source + 2]) changed++;
+  }
+  const canvas = document.querySelector('#screen');
+  canvas.getContext('2d').putImageData(new ImageData(rgba, bitmap.width, bitmap.height), 0, 0);
+  const fontMesh = MinMesh_Font3D(1, 0.1, 0.05, 'neuro.', 'georgia');
+  const fontBounds = fontMesh.bounds();
+  const fontSideFaces = fontMesh.faces.filter(face => {
+    const depths = face.vertices.map(index => fontMesh.vertices[index].position[2]);
+    return Math.min(...depths) !== Math.max(...depths);
+  }).length;
+  const fontShearedExtrusion = fontMesh.faces.filter(face => {
+    const positions = face.vertices.map(index => fontMesh.vertices[index].position);
+    const front = positions.filter(position => Math.abs(position[2]) < 1e-7);
+    const back = positions.filter(position => Math.abs(position[2] - 0.1) < 1e-7);
+    return front.length === 2 && back.length === 2 && front.every(position =>
+      back.some(candidate => Math.abs(candidate[0] - position[0] - 0.1) < 1e-6 &&
+        Math.abs(candidate[1] - position[1]) < 1e-6));
+  }).length === fontSideFaces;
+  const fontPrepared = fontMesh.prepare();
+  const fontEdges = new Map();
+  let fontDegenerateTriangles = 0;
+  for (let offset = 0; offset < fontPrepared.indices.length; offset += 3) {
+    const triangle = [0, 1, 2].map(corner => fontPrepared.indices[offset + corner]);
+    const points = triangle.map(index => fontPrepared.positions.subarray(index * 3, index * 3 + 3));
+    const ab = points[1].map((value, index) => value - points[0][index]);
+    const ac = points[2].map((value, index) => value - points[0][index]);
+    const cross = [
+      ab[1] * ac[2] - ab[2] * ac[1],
+      ab[2] * ac[0] - ab[0] * ac[2],
+      ab[0] * ac[1] - ab[1] * ac[0],
+    ];
+    if (Math.hypot(...cross) <= 1e-12) fontDegenerateTriangles++;
+    const canonical = triangle.map(index => fontPrepared.shadowVertexMap[index]);
+    for (let edge = 0; edge < 3; edge++) {
+      const a = canonical[edge], b = canonical[(edge + 1) % 3];
+      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+      let record = fontEdges.get(key);
+      if (!record) fontEdges.set(key, record = []);
+      record.push([a, b]);
+    }
+  }
+  let fontBadEdges = 0;
+  for (const records of fontEdges.values()) if (records.length !== 2 ||
+      records[0][0] === records[1][0] && records[0][1] === records[1][1]) fontBadEdges++;
+  const flatFontMesh = MinMesh_Font3D(1, 0, 0.05, 'o', 'georgia');
+  const flatFontBounds = flatFontMesh.bounds();
+  const flatFontPrepared = flatFontMesh.prepare();
+  const fontOutline = fontMesh.vertices.length > 'neuro.'.length * 8 &&
+    fontPrepared.triangleCount > 'neuro.'.length * 12 &&
+    fontSideFaces > 0 &&
+    fontShearedExtrusion && fontDegenerateTriangles === 0 && fontBadEdges === 0 &&
+    flatFontPrepared.triangleCount > 0 &&
+    flatFontBounds.minimum[2] === 0 && flatFontBounds.maximum[2] === 0 &&
+    fontBounds.maximum[0] > fontBounds.minimum[0] &&
+    fontBounds.maximum[1] > fontBounds.minimum[1];
+  document.documentElement.dataset.webglNonblack = String(changed);
+  document.documentElement.dataset.webglDrawCalls = '1';
+  document.documentElement.dataset.webglTriangles = '1';
+  document.documentElement.dataset.font3dVertices = String(fontMesh.vertices.length);
+  document.documentElement.dataset.font3dTriangles = String(fontPrepared.triangleCount);
+  document.documentElement.dataset.font3dSideFaces = String(fontSideFaces);
+  document.documentElement.dataset.font3dDegenerateTriangles = String(fontDegenerateTriangles);
+  document.documentElement.dataset.font3dBadEdges = String(fontBadEdges);
+  document.documentElement.dataset.font3dShearedExtrusion = String(fontShearedExtrusion);
+  document.documentElement.dataset.font3dFlatTriangles = String(flatFontPrepared.triangleCount);
+  document.documentElement.dataset.webglSmoke = changed > 100 && fontOutline ? 'ok' : 'error';
+  if (changed <= 100) throw new Error(`Bitmap_Text produced only ${changed} colored pixels`);
+  if (!fontOutline) throw new Error('MinMesh_Font3D did not derive a deterministic glyph outline');
+} catch (error) {
+  document.documentElement.dataset.webglSmoke = 'error';
+  document.documentElement.dataset.webglError = error.message;
+  console.error(error);
+}
+</script>

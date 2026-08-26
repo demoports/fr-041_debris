@@ -1,0 +1,147 @@
+<!doctype html>
+<html data-audio-smoke="pending">
+<head><meta charset="utf-8"></head>
+<body>
+<script type="module">
+  const root = document.documentElement;
+  const audioSmokeErrors = [];
+  const originalConsoleError = console.error;
+  addEventListener('error', event => audioSmokeErrors.push(event.error?.message || event.message || 'window error'));
+  addEventListener('unhandledrejection', event => audioSmokeErrors.push(event.reason?.message || String(event.reason)));
+  console.error = (...values) => {
+    audioSmokeErrors.push(values.map(value => value?.message || String(value)).join(' '));
+    originalConsoleError.apply(console, values);
+  };
+  const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+  const withTimeout = (promise, milliseconds, label) => Promise.race([
+    promise,
+    delay(milliseconds).then(() => { throw new Error(`${label} timed out after ${milliseconds} ms`); }),
+  ]);
+  const waitFor = async (predicate, milliseconds, label) => {
+    const deadline = performance.now() + milliseconds;
+    while (!predicate()) {
+      if (performance.now() >= deadline) throw new Error(`${label} timed out after ${milliseconds} ms`);
+      await delay(10);
+    }
+  };
+
+  let stream = null;
+  let capture = null;
+  try {
+    const [dataModule, v2Module, audioModule] = await Promise.all([
+      import('../src/data.js'),
+      import('../src/v2.js'),
+      import('../src/audio.js'),
+    ]);
+    const production = await dataModule.loadProductionData();
+    const song = v2Module.parseV2M(production.loaderSong);
+    const player = v2Module.createV2Player(song, { sampleRate: 44100 });
+    stream = new audioModule.AudioStream({
+      sampleRate: 44100,
+      blockFrames: 2048,
+      queueBlocks: 8,
+      tailSeconds: 0,
+    });
+    await stream.init(player);
+
+    const isWorklet = typeof AudioWorkletNode === 'function'
+      && stream.node instanceof AudioWorkletNode
+      && stream.node.port;
+    if (!isWorklet) throw new Error('AudioStream did not select its AudioWorklet backend');
+
+    await stream.context.audioWorklet.addModule(
+      new URL('./audio_capture_worklet.js', import.meta.url),
+    );
+
+    capture = new AudioWorkletNode(stream.context, 'debris-capture', {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      outputChannelCount: [2],
+      channelCount: 2,
+      channelCountMode: 'explicit',
+      processorOptions: { targetFrames: 8192 },
+    });
+    const capturedPromise = new Promise((resolve, reject) => {
+      capture.onprocessorerror = () => reject(new Error('capture AudioWorklet processor error'));
+      capture.port.onmessage = event => {
+        if (event.data?.type === 'capture') resolve(event.data);
+      };
+    });
+
+    // Keep AudioStream's production source processor and queueing unchanged;
+    // place the meter downstream so the exact samples reaching the sink are
+    // checked rather than re-rendering the synth on the main thread.
+    stream.node.disconnect();
+    stream.node.connect(capture);
+    capture.connect(stream.context.destination);
+
+    const contextStart = stream.context.currentTime;
+    await stream.start();
+    const captured = await withTimeout(capturedPromise, 5000, 'stereo worklet capture');
+    await waitFor(() => stream.playedSample > 0, 2000, 'AudioStream clock report');
+    const progressSample = stream.sample;
+    const progressTime = stream.time;
+    const contextDelta = stream.context.currentTime - contextStart;
+
+    stream.pause(true);
+    await delay(80); // allow a clock report already in flight to settle
+    const pausedSample = stream.sample;
+    await delay(80);
+    const pausedAfter = stream.sample;
+    stream.pause(false);
+    await waitFor(() => stream.sample > pausedAfter, 2000, 'resumed AudioStream clock');
+    const resumedSample = stream.sample;
+
+    root.dataset.audioBackend = stream.node.constructor.name;
+    root.dataset.audioModule = 'loaded';
+    root.dataset.audioV2Patches = String(song.patchCount);
+    root.dataset.audioV2Events = String(song.events.length);
+    root.dataset.audioSampleRate = String(stream.sampleRate);
+    root.dataset.audioFrames = String(captured.frames);
+    root.dataset.audioNonzeroLeft = String(captured.nonzeroLeft);
+    root.dataset.audioNonzeroRight = String(captured.nonzeroRight);
+    root.dataset.audioStereoDifference = String(captured.stereoDifference);
+    root.dataset.audioInvalid = String(captured.invalid);
+    root.dataset.audioPeakLeft = captured.peakLeft.toPrecision(8);
+    root.dataset.audioPeakRight = captured.peakRight.toPrecision(8);
+    root.dataset.audioRmsLeft = captured.rmsLeft.toPrecision(8);
+    root.dataset.audioRmsRight = captured.rmsRight.toPrecision(8);
+    root.dataset.audioContextDelta = contextDelta.toFixed(6);
+    root.dataset.audioProgressSample = String(progressSample);
+    root.dataset.audioProgressTime = progressTime.toFixed(6);
+    root.dataset.audioPausedSample = String(pausedSample);
+    root.dataset.audioPausedAfter = String(pausedAfter);
+    root.dataset.audioResumedSample = String(resumedSample);
+
+    if (captured.frames !== 8192) throw new Error(`captured ${captured.frames} frames instead of 8192`);
+    if (captured.invalid !== 0) throw new Error(`captured ${captured.invalid} non-finite stereo frames`);
+    if (!captured.nonzeroLeft || !captured.nonzeroRight) throw new Error('one or both V2 output channels are silent');
+    if (!captured.stereoDifference) throw new Error('V2 output did not retain stereo separation');
+    if (!(captured.peakLeft > 0 && captured.peakRight > 0)) throw new Error('V2 output peaks are zero');
+    if (!(contextDelta > 0 && progressSample > 0 && progressTime > 0)) throw new Error('AudioStream clock did not advance');
+    if (Math.abs(progressTime - progressSample / stream.sampleRate) > 1 / stream.sampleRate) {
+      throw new Error('AudioStream time and sample progress disagree');
+    }
+    if (pausedAfter !== pausedSample) throw new Error(`pause clock drifted from ${pausedSample} to ${pausedAfter}`);
+    if (resumedSample <= pausedAfter) throw new Error('AudioStream clock did not resume');
+    if (audioSmokeErrors.length) throw new Error(`runtime errors: ${audioSmokeErrors.join(' | ')}`);
+
+    root.dataset.audioErrors = '';
+    root.dataset.audioSmoke = 'ok';
+  } catch (error) {
+    audioSmokeErrors.push(error?.message || String(error));
+    root.dataset.audioErrors = audioSmokeErrors.join(' | ');
+    root.dataset.audioSmoke = 'error';
+    root.dataset.audioError = error?.stack || error?.message || String(error);
+    originalConsoleError(error);
+  } finally {
+    try { capture?.disconnect(); } catch (_) { /* already disconnected */ }
+    try { await stream?.close(); } catch (error) {
+      audioSmokeErrors.push(error?.message || String(error));
+      root.dataset.audioErrors = audioSmokeErrors.join(' | ');
+      root.dataset.audioSmoke = 'error';
+    }
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,327 @@
+<!doctype html>
+<meta charset="utf-8">
+<canvas id="screen" width="64" height="64"></canvas>
+<script type="module">
+import { MatrixStack, mat4Identity } from '../src/core.js';
+import { effectHandlers, executeEffectJob } from '../src/effects.js';
+import { Renderer } from '../src/renderer.js';
+
+try {
+  const canvas = document.querySelector('#screen');
+  const renderer = new Renderer(canvas, { pixelRatio: 1, effectExecutor: executeEffectJob });
+  const gl = renderer.gl;
+  const parameters = new Array(64).fill(0);
+  parameters[0] = 0x0300;
+  parameters[48] = 0x07; // base + light + stencil shadow volume
+  parameters[51] = 24;
+  parameters[52] = 0xffffffff;
+  parameters[53] = 0xffb06020;
+  const material = {
+    kind: 'material', system: '1.1', parameters, textures: [],
+    passes: [
+      { usage: 'base', program: 'static', renderPass: 0, state: 'material11-base' },
+      { usage: 'shadow', program: 'shadow', renderPass: 0, state: 'shadow-volume' },
+      { usage: 'light', program: 'static', renderPass: 0, state: 'material11-light' },
+    ],
+  };
+  const prepared = {
+    positions: new Float32Array([-1.5, -1.25, 3, 1.5, -1.25, 3, 0, 1.5, 3]),
+    normals: new Float32Array([0, 0, -1, 0, 0, -1, 0, 0, -1]),
+    tangents: new Float32Array([1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1]),
+    uvs: new Float32Array([0, 0, 1, 0, 0.5, 1]),
+    colors: new Uint8Array(12),
+    // WZ3's exterior face is clockwise in the unchanged WebGL projection.
+    indices: new Uint16Array([0, 2, 1]),
+    groups: [{ material, start: 0, count: 3 }],
+    materials: [],
+  };
+  const mesh = { prepare: () => prepared };
+  const cameraSpace = mat4Identity();
+  const viewport = {
+    type: 'viewport', flags: 3, clearColor: 0xff000000, crop: [0, 0, 1, 1],
+    ambientLight: 0x00404040,
+    camera: {
+      cameraSpace, nearClip: 0.125, farClip: 64,
+      zoomX: 1, zoomY: 1, centerX: 0, centerY: 0,
+      fogColor: 0, fogStart: 0, fogEnd: 64,
+    },
+    // A one-element native instance job is visually identical, but retains
+    // the source's deliberately unbounded caster classification. That makes
+    // this deliberately open triangle exercise the conservative z-fail cap;
+    // a bounded caster here correctly takes capless z-pass and has no closed
+    // silhouette side to submit.
+    meshJobs: [{ opId: 1, mesh, matrix: mat4Identity(), instances: [mat4Identity()], passAdjust: 0 }],
+    lightJobs: [{
+      kind: 'point', opId: 2, flags: 2,
+      position: new Float32Array([0.5, 0.25, 1]),
+      direction: new Float32Array([0, 0, 1]),
+      color: 0xffffffff, amplify: 1, range: 16,
+    }],
+    effectJobs: [],
+  };
+  // Exact production op16407 Glare values used by the flags=0 viewport at t30.
+  const glareParameters = [
+    31, 0, 0xff90c090, 0xffffe0a0, 0xffffffff,
+    0.007999897003173828, 0.003999948501586914, 1.75, 1.5, 0.5, 0,
+  ];
+  const glareHandler = effectHandlers[0x74];
+  const glareOp = { id: 16407, inputs: [], links: [] };
+  glareOp.cache = glareHandler.init({ op: glareOp, parameters: glareParameters, inputs: [], links: [] });
+  glareOp.exec = current => glareHandler.exec({
+    environment: current, op: glareOp, parameters: glareParameters, inputs: [], links: [],
+  });
+  const environment = {
+    vars: Array.from({ length: 32 }, () => new Float32Array(4)),
+    matrixStack: new MatrixStack(),
+    frame: { effectGeometry: [], postJobs: [] },
+  };
+  const overlayViewport = {
+    type: 'viewport', size: 4, flags: 0, clearColor: 0xff000000, crop: [0, 0, 1, 1],
+    ambientLight: 0, camera: viewport.camera, meshJobs: [], lightJobs: [],
+    effectJobs: [{
+      op: glareOp, effect: glareOp.cache, matrix: mat4Identity(),
+      variables: environment.vars.map(value => new Float32Array(value)),
+    }],
+  };
+  // Native Demo execution may leave lastOutput null after an inactive branch;
+  // the ordered frameOutputs collection remains authoritative.
+  environment.frameOutputs = [viewport, overlayViewport];
+  const result = renderer.render(null, environment, {
+    width: 64, height: 64, pixelRatio: 1,
+  });
+  gl.finish();
+  const pixels = new Uint8Array(renderer.width * renderer.height * 4);
+  gl.readPixels(0, 0, renderer.width, renderer.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  let nonblack = 0;
+  for (let offset = 0; offset < pixels.length; offset += 4) {
+    if (pixels[offset] || pixels[offset + 1] || pixels[offset + 2]) nonblack++;
+  }
+
+  // A second run mirrors t0's Viewport,Layer2D root shape. The player build's
+  // Layer2D child renders directly into the master, preserving depth/stencil.
+  const layerParameters = new Array(64).fill(0);
+  layerParameters[0] = 0x2000; // additive layer, preserving the first root
+  layerParameters[9] = 0x10; // Color0 SET
+  layerParameters[23] = 8; // Color0 alpha
+  layerParameters[28] = 0xffffffff;
+  const layer = {
+    type: 'layer2d', input: viewport,
+    material: { kind: 'material', system: '1.1', parameters: layerParameters, textures: [],
+      passes: [{ usage: 'other', renderPass: 0, state: 'material11-single' }] },
+    screen: [0, 0, 1, 1], uv: [0, 0, 1, 1], z: 0, clearFlags: 0,
+  };
+  environment.frameOutputs = [viewport, layer];
+  const layerResult = renderer.render(null, environment, {
+    width: 64, height: 64, pixelRatio: 1,
+  });
+  gl.finish();
+  const layerPixels = new Uint8Array(pixels.length);
+  gl.readPixels(0, 0, renderer.width, renderer.height, gl.RGBA, gl.UNSIGNED_BYTE, layerPixels);
+  let layerNonblack = 0;
+  for (let offset = 0; offset < layerPixels.length; offset += 4) {
+    if (layerPixels[offset] || layerPixels[offset + 1] || layerPixels[offset + 2]) layerNonblack++;
+  }
+
+  // Material20's REALMAT path is a depth fill, a three-texture color prepass,
+  // a destination-multiply ambient pass, then lights sampling the captured
+  // prepass. Texture slot 3 is deliberately a black alpha mask: it must not
+  // contaminate the color prepass.
+  const bitmap = rgba => ({
+    kind: 'bitmap', width: 1, height: 1, texMipCount: 1,
+    data: new Uint16Array(rgba.map(value => Math.round(value * 0x7fff))),
+  });
+  const material20Parameters = new Array(43).fill(0);
+  material20Parameters[1] = 0xffffffff;
+  material20Parameters[3] = 16;
+  material20Parameters[9] = 0x00010000; // detail 1: mul2
+  const material20 = {
+    kind: 'material', system: '2.0', parameters: material20Parameters,
+    textures: [bitmap([0.4, 0.3, 0.2, 1]), bitmap([0.5, 0.5, 0.5, 1]), null,
+      bitmap([0, 0, 0, 1]), null, null, null],
+    passes: [
+      { usage: 'base', renderPass: 0, state: 'material20-zfill' },
+      { usage: 'prelight', renderPass: 0, state: 'material20-texture' },
+      { usage: 'ambient', renderPass: 0, state: 'material20-ambient' },
+      { usage: 'light', renderPass: 0, state: 'material20-light' },
+    ],
+  };
+  const material20Prepared = { ...prepared,
+    groups: [{ material: material20, start: 0, count: 3 }],
+  };
+  const material20Viewport = { ...viewport, ambientLight: 0x00404040,
+    meshJobs: [{ opId: 3, mesh: { prepare: () => material20Prepared },
+      matrix: mat4Identity(), instances: null, passAdjust: 0 }],
+  };
+  environment.frameOutputs = [material20Viewport];
+  const material20Result = renderer.render(null, environment, {
+    width: 64, height: 64, pixelRatio: 1,
+  });
+  gl.finish();
+  const material20Pixels = new Uint8Array(pixels.length);
+  gl.readPixels(0, 0, renderer.width, renderer.height, gl.RGBA, gl.UNSIGNED_BYTE, material20Pixels);
+  let material20Nonblack = 0;
+  for (let offset = 0; offset < material20Pixels.length; offset += 4) {
+    if (material20Pixels[offset] || material20Pixels[offset + 1] || material20Pixels[offset + 2]) {
+      material20Nonblack++;
+    }
+  }
+
+  // Debris' lit window panes use Material20's environment postlight pass: a
+  // signed Q8W8V8U8 normal/gloss map weights an additive bright environment
+  // map after the ambient pass has darkened the base texture. This single-level
+  // case also exercises the core WebGL2 RGBA8_SNORM/RGBA/BYTE upload path.
+  const signedNormalGloss = {
+    kind: 'bitmap', width: 1, height: 1, texMipCount: 1, format: 5,
+    // Upload swizzles words 2,1,0 to shader RGB. This encodes tangent-space
+    // +X (the source shader's normal basis) and signed gloss +1.
+    data: new Uint16Array([0x4000, 0x4000, 0x7fff, 0x7fff]),
+  };
+  const environmentParameters = new Array(43).fill(0);
+  environmentParameters[0] = 0x80; // weight environment by normal-map alpha
+  environmentParameters[1] = 0xffffffff;
+  environmentParameters[3] = 16;
+  environmentParameters[16] = 1; // linear bump sampler
+  environmentParameters[18] = 0x30001; // world reflection + bumped environment
+  const environmentMaterial = {
+    kind: 'material', system: '2.0', parameters: environmentParameters,
+    textures: [bitmap([0.02, 0.02, 0.02, 1]), null, null, null,
+      signedNormalGloss, null, bitmap([1, 1, 1, 1])],
+    passes: [
+      { usage: 'base', renderPass: 0, state: 'material20-zfill' },
+      { usage: 'prelight', renderPass: 0, state: 'material20-texture' },
+      { usage: 'ambient', renderPass: 0, state: 'material20-ambient' },
+      { usage: 'postlight', renderPass: 0, state: 'material20-environment' },
+    ],
+  };
+  const environmentPrepared = { ...prepared,
+    groups: [{ material: environmentMaterial, start: 0, count: 3 }],
+  };
+  const environmentViewport = { ...viewport, ambientLight: 0,
+    lightJobs: [],
+    meshJobs: [{ opId: 4, mesh: { prepare: () => environmentPrepared },
+      matrix: mat4Identity(), instances: null, passAdjust: 0 }],
+  };
+  environment.frameOutputs = [environmentViewport];
+  const environmentResult = renderer.render(null, environment, {
+    width: 64, height: 64, pixelRatio: 1,
+  });
+  gl.finish();
+  const environmentPixels = new Uint8Array(pixels.length);
+  gl.readPixels(0, 0, renderer.width, renderer.height, gl.RGBA, gl.UNSIGNED_BYTE,
+    environmentPixels);
+  let environmentBright = 0;
+  for (let offset = 0; offset < environmentPixels.length; offset += 4) {
+    if (environmentPixels[offset] > 200 && environmentPixels[offset + 1] > 200 &&
+        environmentPixels[offset + 2] > 200) environmentBright++;
+  }
+
+  // The production stays 2:1 inside an arbitrary outer drawing buffer. Use a
+  // solid inner clear to pixel-check letterboxing, exact fit and pillarboxing
+  // without loading the real production graph.
+  const aspectCases = [
+    [160, 90, [0, 5, 160, 80]],
+    [120, 90, [0, 15, 120, 60]],
+    [160, 80, [0, 0, 160, 80]],
+    [210, 90, [15, 0, 180, 90]],
+  ];
+  const solidViewport = {
+    ...viewport, clearColor: 0xff204060,
+    meshJobs: [], lightJobs: [], effectJobs: [],
+  };
+  const aspectResults = [];
+  for (const [outerWidth, outerHeight, expected] of aspectCases) {
+    environment.frameOutputs = [solidViewport];
+    const aspectResult = renderer.render(null, environment, {
+      width: outerWidth, height: outerHeight, pixelRatio: 1, presentationAspect: 2,
+    });
+    gl.finish();
+    const region = aspectResult.presentationRegion;
+    const actual = [region.x, region.y, region.width, region.height];
+    if (actual.some((value, index) => value !== expected[index])) {
+      throw new Error(`invalid 2:1 region for ${outerWidth}x${outerHeight}: ${actual.join(',')}`);
+    }
+    const aspectPixels = new Uint8Array(outerWidth * outerHeight * 4);
+    gl.readPixels(0, 0, outerWidth, outerHeight, gl.RGBA, gl.UNSIGNED_BYTE, aspectPixels);
+    let blackBars = 0, coloredContent = 0;
+    for (let y = 0; y < outerHeight; y++) {
+      for (let x = 0; x < outerWidth; x++) {
+        const offset = (y * outerWidth + x) * 4;
+        const black = !aspectPixels[offset] && !aspectPixels[offset + 1] &&
+          !aspectPixels[offset + 2] && aspectPixels[offset + 3] === 255;
+        const inside = x >= region.x && x < region.x + region.width &&
+          y >= region.y && y < region.y + region.height;
+        if (inside) {
+          if (!black) coloredContent++;
+          else throw new Error(`black pixel inside ${outerWidth}x${outerHeight} production region`);
+        } else {
+          if (black) blackBars++;
+          else throw new Error(`nonblack pixel outside ${outerWidth}x${outerHeight} production region`);
+        }
+      }
+    }
+    const expectedBars = outerWidth * outerHeight - region.width * region.height;
+    if (coloredContent !== region.width * region.height || blackBars !== expectedBars) {
+      throw new Error(`incomplete 2:1 presentation for ${outerWidth}x${outerHeight}`);
+    }
+    aspectResults.push(`${outerWidth}x${outerHeight}:${actual.join(',')}`);
+  }
+
+  // Repeat the real synthetic viewport+glare sequence inside a 16:9 outer
+  // canvas. The authored 2:1 inner surface keeps post effects out of the bars.
+  environment.frameOutputs = [viewport, overlayViewport];
+  const postAspectResult = renderer.render(null, environment, {
+    width: 160, height: 90, pixelRatio: 1, presentationAspect: 2,
+  });
+  gl.finish();
+  const postAspectPixels = new Uint8Array(160 * 90 * 4);
+  gl.readPixels(0, 0, 160, 90, gl.RGBA, gl.UNSIGNED_BYTE, postAspectPixels);
+  const postRegion = postAspectResult.presentationRegion;
+  let postContent = 0;
+  for (let y = 0; y < 90; y++) {
+    for (let x = 0; x < 160; x++) {
+      const offset = (y * 160 + x) * 4;
+      const black = !postAspectPixels[offset] && !postAspectPixels[offset + 1] &&
+        !postAspectPixels[offset + 2] && postAspectPixels[offset + 3] === 255;
+      const inside = x >= postRegion.x && x < postRegion.x + postRegion.width &&
+        y >= postRegion.y && y < postRegion.y + postRegion.height;
+      if (!inside && !black) throw new Error('post-processing overwrote a presentation bar');
+      if (inside && !black) postContent++;
+    }
+  }
+  if (!postContent) throw new Error('2:1 post-processing region has no visible content');
+
+  const errors = [];
+  for (let error = gl.getError(); error !== gl.NO_ERROR; error = gl.getError()) {
+    errors.push(`0x${error.toString(16)}`);
+  }
+  document.documentElement.dataset.webglDrawCalls = String(result.drawCalls);
+  document.documentElement.dataset.webglTriangles = String(result.triangles);
+  document.documentElement.dataset.webglOutputs = String(result.outputs);
+  document.documentElement.dataset.webglNonblack = String(nonblack);
+  document.documentElement.dataset.webglLayerDrawCalls = String(layerResult.drawCalls);
+  document.documentElement.dataset.webglLayerTriangles = String(layerResult.triangles);
+  document.documentElement.dataset.webglLayerOutputs = String(layerResult.outputs);
+  document.documentElement.dataset.webglLayerNonblack = String(layerNonblack);
+  document.documentElement.dataset.webglMaterial20DrawCalls = String(material20Result.drawCalls);
+  document.documentElement.dataset.webglMaterial20Nonblack = String(material20Nonblack);
+  document.documentElement.dataset.webglEnvironmentDrawCalls = String(environmentResult.drawCalls);
+  document.documentElement.dataset.webglEnvironmentBright = String(environmentBright);
+  document.documentElement.dataset.webglAspectRegions = aspectResults.join(';');
+  document.documentElement.dataset.webglAspectSmoke = 'ok';
+  document.documentElement.dataset.webglErrors = errors.join(',');
+  if (result.outputs !== 2 || result.drawCalls < 4 || result.triangles < 3 || nonblack === 0 ||
+      layerResult.outputs !== 2 || layerResult.drawCalls < 3 || layerResult.triangles < 3 ||
+      layerNonblack === 0 || material20Result.outputs !== 1 || material20Result.drawCalls < 5 ||
+      material20Nonblack === 0 || environmentResult.outputs !== 1 ||
+      environmentResult.drawCalls !== 5 || environmentBright === 0 || errors.length) {
+    throw new Error(`invalid sequence result: glare ${result.outputs} outputs/${result.drawCalls} calls/${result.triangles} tris/${nonblack} nonblack, layer ${layerResult.outputs} outputs/${layerResult.drawCalls} calls/${layerResult.triangles} tris/${layerNonblack} nonblack, GL ${errors.join(',') || 'ok'}`);
+  }
+  document.documentElement.dataset.webglSequence = 'viewport,glare;viewport,layer2d';
+  document.documentElement.dataset.webglSmoke = 'ok';
+  renderer.dispose();
+} catch (error) {
+  document.documentElement.dataset.webglSmoke = 'error';
+  document.documentElement.dataset.webglError = error.message;
+  console.error(error);
+}
+</script>

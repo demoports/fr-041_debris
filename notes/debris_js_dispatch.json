@@ -1,0 +1,3332 @@
+[
+  {
+    "classIndex": 0,
+    "id": 129,
+    "idHex": "0x0081",
+    "name": "Cube",
+    "operationCount": 1243,
+    "convention": "0x0600000d",
+    "dataWords": 13,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbbbggggggfff",
+    "packingSlots": 13,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Cube",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 3112,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L3112"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 120,
+      "init_handler": "Mesh_Cube",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L120"
+    }
+  },
+  {
+    "classIndex": 1,
+    "id": 181,
+    "idHex": "0x00b5",
+    "name": "<- Mesh",
+    "operationCount": 147,
+    "convention": "0x06000100",
+    "dataWords": 0,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "Mesh_ToMin",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 5190,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L5190"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 165,
+      "init_handler": "Mesh_ToMin",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L165"
+    }
+  },
+  {
+    "classIndex": 2,
+    "id": 33,
+    "idHex": "0x0021",
+    "name": "Flat",
+    "operationCount": 311,
+    "convention": "0x06000003",
+    "dataWords": 3,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbc",
+    "packingSlots": 3,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Flat",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 460,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L460"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 54,
+      "init_handler": "Bitmap_Flat",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L54"
+    }
+  },
+  {
+    "classIndex": 3,
+    "id": 211,
+    "idHex": "0x00d3",
+    "name": "Material 2.0",
+    "operationCount": 120,
+    "convention": "0xa8007326",
+    "dataWords": 38,
+    "inputSlots": 3,
+    "linkSlots": 7,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "iccgg---iiiiggggiii-ggg-gggggggggggggg",
+    "packingSlots": 38,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MATERIAL",
+    "initHandler": "Init_Material_Material20",
+    "initSource": {
+      "file": "werkkzeug3/genmaterial.cpp",
+      "line": 523,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmaterial.cpp#L523"
+    },
+    "execHandler": "Exec_Material_Material20",
+    "execSource": {
+      "file": "werkkzeug3/genmaterial.cpp",
+      "line": 633,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmaterial.cpp#L633"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 189,
+      "init_handler": "Init_Material_Material20",
+      "exec_handler": "Exec_Material_Material20",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L189"
+    }
+  },
+  {
+    "classIndex": 4,
+    "id": 272,
+    "idHex": "0x0110",
+    "name": "MatLink",
+    "operationCount": 45,
+    "convention": "0x06001102",
+    "dataWords": 2,
+    "inputSlots": 1,
+    "linkSlots": 1,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bb",
+    "packingSlots": 2,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_MatLink",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 2226,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L2226"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 215,
+      "init_handler": "MinMesh_MatLink",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L215"
+    }
+  },
+  {
+    "classIndex": 5,
+    "id": 192,
+    "idHex": "0x00c0",
+    "name": "Scene",
+    "operationCount": 101,
+    "convention": "0x8000010a",
+    "dataWords": 10,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "ggggggfffb",
+    "packingSlots": 10,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SCENE",
+    "initHandler": "Init_Scene_Scene",
+    "initSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 304,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L304"
+    },
+    "execHandler": "Exec_Scene_Scene",
+    "execSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 318,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L318"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 168,
+      "init_handler": "Init_Scene_Scene",
+      "exec_handler": "Exec_Scene_Scene",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L168"
+    }
+  },
+  {
+    "classIndex": 6,
+    "id": 195,
+    "idHex": "0x00c3",
+    "name": "Transform",
+    "operationCount": 930,
+    "convention": "0x00000109",
+    "dataWords": 9,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "ggggggfff",
+    "packingSlots": 9,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SCENE",
+    "initHandler": "Init_Scene_Transform",
+    "initSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 409,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L409"
+    },
+    "execHandler": "Exec_Scene_Transform",
+    "execSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 414,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L414"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 171,
+      "init_handler": "Init_Scene_Transform",
+      "exec_handler": "Exec_Scene_Transform",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L171"
+    }
+  },
+  {
+    "classIndex": 7,
+    "id": 34,
+    "idHex": "0x0022",
+    "name": "Perlin",
+    "operationCount": 36,
+    "convention": "0x0600000b",
+    "dataWords": 11,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbbbebbggcc",
+    "packingSlots": 11,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Perlin",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 2522,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L2522"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 55,
+      "init_handler": "Bitmap_Perlin",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L55"
+    }
+  },
+  {
+    "classIndex": 8,
+    "id": 53,
+    "idHex": "0x0035",
+    "name": "Range",
+    "operationCount": 16,
+    "convention": "0x06000103",
+    "dataWords": 3,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bcc",
+    "packingSlots": 3,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Range",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 916,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L916"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 74,
+      "init_handler": "Bitmap_Range",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L74"
+    }
+  },
+  {
+    "classIndex": 9,
+    "id": 43,
+    "idHex": "0x002b",
+    "name": "HSCB",
+    "operationCount": 421,
+    "convention": "0x06000104",
+    "dataWords": 4,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "gggg",
+    "packingSlots": 4,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_HSCB",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 1081,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L1081"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 64,
+      "init_handler": "Bitmap_HSCB",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L64"
+    }
+  },
+  {
+    "classIndex": 10,
+    "id": 41,
+    "idHex": "0x0029",
+    "name": "Blur",
+    "operationCount": 145,
+    "convention": "0x06000104",
+    "dataWords": 4,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bggg",
+    "packingSlots": 4,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Blur",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 1448,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L1448"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 62,
+      "init_handler": "Bitmap_Blur",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L62"
+    }
+  },
+  {
+    "classIndex": 11,
+    "id": 36,
+    "idHex": "0x0024",
+    "name": "Merge",
+    "operationCount": 368,
+    "convention": "0x87000001",
+    "dataWords": 1,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "b",
+    "packingSlots": 1,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Merge",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 857,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L857"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 57,
+      "init_handler": "Bitmap_Merge",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L57"
+    }
+  },
+  {
+    "classIndex": 12,
+    "id": 44,
+    "idHex": "0x002c",
+    "name": "Transform",
+    "operationCount": 187,
+    "convention": "0x06000108",
+    "dataWords": 8,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "eggeebbb",
+    "packingSlots": 8,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Rotate",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 1622,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L1622"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 65,
+      "init_handler": "Bitmap_Rotate",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L65"
+    }
+  },
+  {
+    "classIndex": 13,
+    "id": 46,
+    "idHex": "0x002e",
+    "name": "Normals",
+    "operationCount": 69,
+    "convention": "0x06000102",
+    "dataWords": 2,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "eb",
+    "packingSlots": 2,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Normals",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 1958,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L1958"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 67,
+      "init_handler": "Bitmap_Normals",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L67"
+    }
+  },
+  {
+    "classIndex": 14,
+    "id": 48,
+    "idHex": "0x0030",
+    "name": "Bump",
+    "operationCount": 47,
+    "convention": "0x0600020e",
+    "dataWords": 14,
+    "inputSlots": 2,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bgggeecceeecge",
+    "packingSlots": 14,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Bump",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 2062,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L2062"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 69,
+      "init_handler": "Bitmap_Bump",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L69"
+    }
+  },
+  {
+    "classIndex": 15,
+    "id": 56,
+    "idHex": "0x0038",
+    "name": "Sharpen",
+    "operationCount": 2,
+    "convention": "0x06000104",
+    "dataWords": 4,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "beee",
+    "packingSlots": 4,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Sharpen",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 3092,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L3092"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 77,
+      "init_handler": "Bitmap_Sharpen",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L77"
+    }
+  },
+  {
+    "classIndex": 16,
+    "id": 35,
+    "idHex": "0x0023",
+    "name": "Color",
+    "operationCount": 162,
+    "convention": "0x06000102",
+    "dataWords": 2,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bc",
+    "packingSlots": 2,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Color",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 901,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L901"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 56,
+      "init_handler": "Bitmap_Color",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L56"
+    }
+  },
+  {
+    "classIndex": 17,
+    "id": 54,
+    "idHex": "0x0036",
+    "name": "TransformMul",
+    "operationCount": 54,
+    "convention": "0x0600010a",
+    "dataWords": 10,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "eggeebcbbc",
+    "packingSlots": 10,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_RotateMul",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 1805,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L1805"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 75,
+      "init_handler": "Bitmap_RotateMul",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L75"
+    }
+  },
+  {
+    "classIndex": 18,
+    "id": 45,
+    "idHex": "0x002d",
+    "name": "Distort",
+    "operationCount": 16,
+    "convention": "0x06000202",
+    "dataWords": 2,
+    "inputSlots": 2,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "eb",
+    "packingSlots": 2,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Distort",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 1893,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L1893"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 66,
+      "init_handler": "Bitmap_Distort",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L66"
+    }
+  },
+  {
+    "classIndex": 19,
+    "id": 37,
+    "idHex": "0x0025",
+    "name": "Format",
+    "operationCount": 72,
+    "convention": "0x06000103",
+    "dataWords": 3,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbb",
+    "packingSlots": 3,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Format",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 472,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L472"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 58,
+      "init_handler": "Bitmap_Format",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L58"
+    }
+  },
+  {
+    "classIndex": 20,
+    "id": 150,
+    "idHex": "0x0096",
+    "name": "MatLink",
+    "operationCount": 1288,
+    "convention": "0x06001102",
+    "dataWords": 2,
+    "inputSlots": 1,
+    "linkSlots": 1,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bb",
+    "packingSlots": 2,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_MatLink",
+    "initSource": {
+      "file": "werkkzeug3/genmaterial.cpp",
+      "line": 470,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmaterial.cpp#L470"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 141,
+      "init_handler": "Mesh_MatLink",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L141"
+    }
+  },
+  {
+    "classIndex": 21,
+    "id": 137,
+    "idHex": "0x0089",
+    "name": "TransEx",
+    "operationCount": 1023,
+    "convention": "0x4600010c",
+    "dataWords": 12,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bGGGGGGFFFbb",
+    "packingSlots": 12,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_TransformEx",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 3543,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L3543"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 128,
+      "init_handler": "Mesh_TransformEx",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L128"
+    }
+  },
+  {
+    "classIndex": 22,
+    "id": 57,
+    "idHex": "0x0039",
+    "name": "GlowRect",
+    "operationCount": 845,
+    "convention": "0x0600010b",
+    "dataWords": 11,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "eeeeeecegbb",
+    "packingSlots": 11,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_GlowRect",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 944,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L944"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 78,
+      "init_handler": "Bitmap_GlowRect",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L78"
+    }
+  },
+  {
+    "classIndex": 23,
+    "id": 208,
+    "idHex": "0x00d0",
+    "name": "Material",
+    "operationCount": 101,
+    "convention": "0xae007140",
+    "dataWords": 64,
+    "inputSlots": 1,
+    "linkSlots": 7,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "iii-iiiiiiiiiiiiiiiii--iffffccccf-fffeeefffffeffiiifii--iiiiffff",
+    "packingSlots": 64,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MATERIAL",
+    "initHandler": "Init_Material_Material",
+    "initSource": {
+      "file": "werkkzeug3/genmaterial.cpp",
+      "line": 172,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmaterial.cpp#L172"
+    },
+    "execHandler": "Exec_Material_Material",
+    "execSource": {
+      "file": "werkkzeug3/genmaterial.cpp",
+      "line": 413,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmaterial.cpp#L413"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 185,
+      "init_handler": "Init_Material_Material",
+      "exec_handler": "Exec_Material_Material",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L185"
+    }
+  },
+  {
+    "classIndex": 24,
+    "id": 146,
+    "idHex": "0x0092",
+    "name": "Add",
+    "operationCount": 1011,
+    "convention": "0x87000000",
+    "dataWords": 0,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Add",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 4022,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L4022"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 137,
+      "init_handler": "Mesh_Add",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L137"
+    }
+  },
+  {
+    "classIndex": 25,
+    "id": 136,
+    "idHex": "0x0088",
+    "name": "Transform",
+    "operationCount": 3011,
+    "convention": "0x4600010a",
+    "dataWords": 10,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bGGGGGGGGG",
+    "packingSlots": 10,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Transform",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 3524,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L3524"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 127,
+      "init_handler": "Mesh_Transform",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L127"
+    }
+  },
+  {
+    "classIndex": 26,
+    "id": 61,
+    "idHex": "0x003d",
+    "name": "Bricks",
+    "operationCount": 35,
+    "convention": "0x0600000e",
+    "dataWords": 14,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbcccffbbbbbff",
+    "packingSlots": 14,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Bricks",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 3417,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L3417"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 82,
+      "init_handler": "Bitmap_Bricks",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L82"
+    }
+  },
+  {
+    "classIndex": 27,
+    "id": 157,
+    "idHex": "0x009d",
+    "name": "Grid",
+    "operationCount": 249,
+    "convention": "0x06000003",
+    "dataWords": 3,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbb",
+    "packingSlots": 3,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Grid",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 4412,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L4412"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 145,
+      "init_handler": "Mesh_Grid",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L145"
+    }
+  },
+  {
+    "classIndex": 28,
+    "id": 49,
+    "idHex": "0x0031",
+    "name": "Text",
+    "operationCount": 34,
+    "convention": "0x468a0109",
+    "dataWords": 9,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 2,
+    "splineSlots": 0,
+    "packing": "eeeecbbee",
+    "packingSlots": 9,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Text",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 2218,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L2218"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 70,
+      "init_handler": "Bitmap_Text",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L70"
+    }
+  },
+  {
+    "classIndex": 29,
+    "id": 42,
+    "idHex": "0x002a",
+    "name": "Mask",
+    "operationCount": 48,
+    "convention": "0x06000301",
+    "dataWords": 1,
+    "inputSlots": 3,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "b",
+    "packingSlots": 1,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Mask",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 1575,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L1575"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 63,
+      "init_handler": "Bitmap_Mask",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L63"
+    }
+  },
+  {
+    "classIndex": 30,
+    "id": 165,
+    "idHex": "0x00a5",
+    "name": "UVProject",
+    "operationCount": 110,
+    "convention": "0x0600010b",
+    "dataWords": 11,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bfffffffffb",
+    "packingSlots": 11,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_UVProjection",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 4600,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L4600"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 151,
+      "init_handler": "Mesh_UVProjection",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L151"
+    }
+  },
+  {
+    "classIndex": 31,
+    "id": 149,
+    "idHex": "0x0095",
+    "name": "Multiply",
+    "operationCount": 812,
+    "convention": "0x46000111",
+    "dataWords": 17,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "GGGGGGFFFbbGGGGGGF",
+    "packingSlots": 18,
+    "packingOverrunWords": 1,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Multiply",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 4091,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L4091"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 140,
+      "init_handler": "Mesh_Multiply",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L140"
+    }
+  },
+  {
+    "classIndex": 32,
+    "id": 166,
+    "idHex": "0x00a6",
+    "name": "Center",
+    "operationCount": 747,
+    "convention": "0x06000102",
+    "dataWords": 2,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bb",
+    "packingSlots": 2,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Center",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 4704,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L4704"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 152,
+      "init_handler": "Mesh_Center",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L152"
+    }
+  },
+  {
+    "classIndex": 33,
+    "id": 39,
+    "idHex": "0x0027",
+    "name": "GlowRectOld",
+    "operationCount": 25,
+    "convention": "0x0600010b",
+    "dataWords": 11,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "eeeeeecegbb",
+    "packingSlots": 11,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_GlowRect",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 944,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L944"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 60,
+      "init_handler": "Bitmap_GlowRect",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L60"
+    }
+  },
+  {
+    "classIndex": 34,
+    "id": 50,
+    "idHex": "0x0032",
+    "name": "Cell",
+    "operationCount": 7,
+    "convention": "0x0600000d",
+    "dataWords": 13,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbcccbbeebebf",
+    "packingSlots": 13,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Cell",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 2694,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L2694"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 71,
+      "init_handler": "Bitmap_Cell",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L71"
+    }
+  },
+  {
+    "classIndex": 35,
+    "id": 59,
+    "idHex": "0x003b",
+    "name": "ColorBalance",
+    "operationCount": 23,
+    "convention": "0x06000109",
+    "dataWords": 9,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "eeeeeeeee",
+    "packingSlots": 9,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_ColorBalance",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 3240,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L3240"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 80,
+      "init_handler": "Bitmap_ColorBalance",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L80"
+    }
+  },
+  {
+    "classIndex": 36,
+    "id": 176,
+    "idHex": "0x00b0",
+    "name": "ShadowEnable",
+    "operationCount": 80,
+    "convention": "0x06000101",
+    "dataWords": 1,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "b",
+    "packingSlots": 1,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_ShadowEnable",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 5015,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L5015"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 162,
+      "init_handler": "Mesh_ShadowEnable",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L162"
+    }
+  },
+  {
+    "classIndex": 37,
+    "id": 52,
+    "idHex": "0x0034",
+    "name": "Gradient",
+    "operationCount": 13,
+    "convention": "0x06000008",
+    "dataWords": 8,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbcceeeb",
+    "packingSlots": 8,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Gradient",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 3036,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L3036"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 73,
+      "init_handler": "Bitmap_Gradient",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L73"
+    }
+  },
+  {
+    "classIndex": 38,
+    "id": 134,
+    "idHex": "0x0086",
+    "name": "Select Cube",
+    "operationCount": 61,
+    "convention": "0x06000108",
+    "dataWords": 8,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "mbffffff",
+    "packingSlots": 8,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_SelectCube",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 3264,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L3264"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 125,
+      "init_handler": "Mesh_SelectCube",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L125"
+    }
+  },
+  {
+    "classIndex": 39,
+    "id": 130,
+    "idHex": "0x0082",
+    "name": "Cylinder",
+    "operationCount": 25,
+    "convention": "0x06000005",
+    "dataWords": 5,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbbbb",
+    "packingSlots": 5,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Cylinder",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 3566,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L3566"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 121,
+      "init_handler": "Mesh_Cylinder",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L121"
+    }
+  },
+  {
+    "classIndex": 40,
+    "id": 62,
+    "idHex": "0x003e",
+    "name": "Bulge",
+    "operationCount": 1,
+    "convention": "0x06000101",
+    "dataWords": 1,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "g",
+    "packingSlots": 1,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Bulge",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 3364,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L3364"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 83,
+      "init_handler": "Bitmap_Bulge",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L83"
+    }
+  },
+  {
+    "classIndex": 41,
+    "id": 147,
+    "idHex": "0x0093",
+    "name": "Delete Faces",
+    "operationCount": 36,
+    "convention": "0x06000101",
+    "dataWords": 1,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "b",
+    "packingSlots": 1,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_DeleteFaces",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 4045,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L4045"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 138,
+      "init_handler": "Mesh_DeleteFaces",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L138"
+    }
+  },
+  {
+    "classIndex": 42,
+    "id": 163,
+    "idHex": "0x00a3",
+    "name": "Invert",
+    "operationCount": 54,
+    "convention": "0x06000100",
+    "dataWords": 0,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Invert",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 4555,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L4555"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 149,
+      "init_handler": "Mesh_Invert",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L149"
+    }
+  },
+  {
+    "classIndex": 43,
+    "id": 180,
+    "idHex": "0x00b4",
+    "name": "Multiply 2",
+    "operationCount": 523,
+    "convention": "0x87000014",
+    "dataWords": 20,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbbbgggbbbgggbbbbggg",
+    "packingSlots": 20,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Multiply2",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 5029,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L5029"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 164,
+      "init_handler": "Mesh_Multiply2",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L164"
+    }
+  },
+  {
+    "classIndex": 44,
+    "id": 193,
+    "idHex": "0x00c1",
+    "name": "Add",
+    "operationCount": 459,
+    "convention": "0x85000000",
+    "dataWords": 0,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SCENE",
+    "initHandler": "Init_Scene_Add",
+    "initSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 325,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L325"
+    },
+    "execHandler": "Exec_Scene_Add",
+    "execSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 341,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L341"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 169,
+      "init_handler": "Init_Scene_Add",
+      "exec_handler": "Exec_Scene_Add",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L169"
+    }
+  },
+  {
+    "classIndex": 45,
+    "id": 386,
+    "idHex": "0x0182",
+    "name": "Marker",
+    "operationCount": 13,
+    "convention": "0x80000101",
+    "dataWords": 1,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "b",
+    "packingSlots": 1,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SCENE",
+    "initHandler": "Init_Scene_Marker",
+    "initSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 1772,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L1772"
+    },
+    "execHandler": "Exec_Scene_Marker",
+    "execSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 1779,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L1779"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 248,
+      "init_handler": "Init_Scene_Marker",
+      "exec_handler": "Exec_Scene_Marker",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L248"
+    }
+  },
+  {
+    "classIndex": 46,
+    "id": 160,
+    "idHex": "0x00a0",
+    "name": "Bend",
+    "operationCount": 61,
+    "convention": "0x46000118",
+    "dataWords": 24,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bGGGGGGFFFGGGGGGFFFEEFFb",
+    "packingSlots": 24,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Bend",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 4175,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L4175"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 146,
+      "init_handler": "Mesh_Bend",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L146"
+    }
+  },
+  {
+    "classIndex": 47,
+    "id": 171,
+    "idHex": "0x00ab",
+    "name": "Bend 2",
+    "operationCount": 47,
+    "convention": "0x06000108",
+    "dataWords": 8,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "fffeeeff",
+    "packingSlots": 8,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Bend2",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 4801,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L4801"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 157,
+      "init_handler": "Mesh_Bend2",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L157"
+    }
+  },
+  {
+    "classIndex": 48,
+    "id": 131,
+    "idHex": "0x0083",
+    "name": "Torus",
+    "operationCount": 2,
+    "convention": "0x06000007",
+    "dataWords": 7,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbffeeb",
+    "packingSlots": 7,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Torus",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 3729,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L3729"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 122,
+      "init_handler": "Mesh_Torus",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L122"
+    }
+  },
+  {
+    "classIndex": 49,
+    "id": 161,
+    "idHex": "0x00a1",
+    "name": "Select Logic",
+    "operationCount": 1,
+    "convention": "0x06000104",
+    "dataWords": 4,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "mmmb",
+    "packingSlots": 4,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_SelectLogic",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 4501,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L4501"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 147,
+      "init_handler": "Mesh_SelectLogic",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L147"
+    }
+  },
+  {
+    "classIndex": 50,
+    "id": 388,
+    "idHex": "0x0184",
+    "name": "Ambient",
+    "operationCount": 80,
+    "convention": "0x00000001",
+    "dataWords": 1,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "c",
+    "packingSlots": 1,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SCENE",
+    "initHandler": "Init_Scene_Ambient",
+    "initSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 1818,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L1818"
+    },
+    "execHandler": "Exec_Scene_Ambient",
+    "execSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 1823,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L1823"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 250,
+      "init_handler": "Init_Scene_Ambient",
+      "exec_handler": "Exec_Scene_Ambient",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L250"
+    }
+  },
+  {
+    "classIndex": 51,
+    "id": 196,
+    "idHex": "0x00c4",
+    "name": "Light",
+    "operationCount": 132,
+    "convention": "0x0000000b",
+    "dataWords": 11,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "eeefffbecff",
+    "packingSlots": 11,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SCENE",
+    "initHandler": "Init_Scene_Light",
+    "initSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 421,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L421"
+    },
+    "execHandler": "Exec_Scene_Light",
+    "execSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 426,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L426"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 172,
+      "init_handler": "Init_Scene_Light",
+      "exec_handler": "Exec_Scene_Light",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L172"
+    }
+  },
+  {
+    "classIndex": 52,
+    "id": 58,
+    "idHex": "0x003a",
+    "name": "Import",
+    "operationCount": 1,
+    "convention": "0x46090000",
+    "dataWords": 0,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 1,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Import",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 3118,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L3118"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 79,
+      "init_handler": "Bitmap_Import",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L79"
+    }
+  },
+  {
+    "classIndex": 53,
+    "id": 107,
+    "idHex": "0x006b",
+    "name": "ChainLine",
+    "operationCount": 53,
+    "convention": "0x00001015",
+    "dataWords": 21,
+    "inputSlots": 0,
+    "linkSlots": 1,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "ffffffbbffffffffbfffb",
+    "packingSlots": 21,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_EFFECT",
+    "initHandler": "Init_Effect_ChainLine",
+    "initSource": {
+      "file": "werkkzeug3/geneffectdebris.cpp",
+      "line": 114,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/geneffectdebris.cpp#L114"
+    },
+    "execHandler": "Exec_Effect_ChainLine",
+    "execSource": {
+      "file": "werkkzeug3/geneffectdebris.cpp",
+      "line": 143,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/geneffectdebris.cpp#L143"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 100,
+      "init_handler": "Init_Effect_ChainLine",
+      "exec_handler": "Exec_Effect_ChainLine",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L100"
+    }
+  },
+  {
+    "classIndex": 54,
+    "id": 194,
+    "idHex": "0x00c2",
+    "name": "Multiply",
+    "operationCount": 63,
+    "convention": "0x0000010a",
+    "dataWords": 10,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "ggggggfffb",
+    "packingSlots": 10,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SCENE",
+    "initHandler": "Init_Scene_Multiply",
+    "initSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 371,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L371"
+    },
+    "execHandler": "Exec_Scene_Multiply",
+    "execSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 386,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L386"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 170,
+      "init_handler": "Init_Scene_Multiply",
+      "exec_handler": "Exec_Scene_Multiply",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L170"
+    }
+  },
+  {
+    "classIndex": 55,
+    "id": 132,
+    "idHex": "0x0084",
+    "name": "Sphere",
+    "operationCount": 5,
+    "convention": "0x06000002",
+    "dataWords": 2,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bb",
+    "packingSlots": 2,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Sphere",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 3847,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L3847"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 123,
+      "init_handler": "Mesh_Sphere",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L123"
+    }
+  },
+  {
+    "classIndex": 56,
+    "id": 24,
+    "idHex": "0x0018",
+    "name": "Spline",
+    "operationCount": 125,
+    "convention": "0x40080000",
+    "dataWords": 0,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SPLINE",
+    "initHandler": "Init_Misc_Spline",
+    "initSource": {
+      "file": "werkkzeug3/genblobspline.cpp",
+      "line": 649,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genblobspline.cpp#L649"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 47,
+      "init_handler": "Init_Misc_Spline",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L47"
+    }
+  },
+  {
+    "classIndex": 57,
+    "id": 25,
+    "idHex": "0x0019",
+    "name": "ShakeEvent",
+    "operationCount": 70,
+    "convention": "0xc0000211",
+    "dataWords": 17,
+    "inputSlots": 2,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bffffffffffffffff",
+    "packingSlots": 17,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SPLINE",
+    "initHandler": "Init_Misc_Shaker",
+    "initSource": {
+      "file": "werkkzeug3/genblobspline.cpp",
+      "line": 666,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genblobspline.cpp#L666"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 48,
+      "init_handler": "Init_Misc_Shaker",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L48"
+    }
+  },
+  {
+    "classIndex": 58,
+    "id": 240,
+    "idHex": "0x00f0",
+    "name": "Viewport",
+    "operationCount": 104,
+    "convention": "0x80000218",
+    "dataWords": 24,
+    "inputSlots": 2,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bicggggggffffffcffggffff",
+    "packingSlots": 24,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_IPP",
+    "initHandler": "Init_IPP_Viewport",
+    "initSource": {
+      "file": "werkkzeug3/genoverlay.cpp",
+      "line": 869,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genoverlay.cpp#L869"
+    },
+    "execHandler": "Exec_IPP_Viewport",
+    "execSource": {
+      "file": "werkkzeug3/genoverlay.cpp",
+      "line": 964,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genoverlay.cpp#L964"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 204,
+      "init_handler": "Init_IPP_Viewport",
+      "exec_handler": "Exec_IPP_Viewport",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L204"
+    }
+  },
+  {
+    "classIndex": 59,
+    "id": 6,
+    "idHex": "0x0006",
+    "name": "Event",
+    "operationCount": 104,
+    "convention": "0x00000101",
+    "dataWords": 1,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "f",
+    "packingSlots": 1,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_ANY",
+    "initHandler": "Init_Misc_Event",
+    "initSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2594,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2594"
+    },
+    "execHandler": "Exec_Misc_Event",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2632,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2632"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 27,
+      "init_handler": "Init_Misc_Event",
+      "exec_handler": "Exec_Misc_Event",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L27"
+    }
+  },
+  {
+    "classIndex": 60,
+    "id": 63,
+    "idHex": "0x003f",
+    "name": "Render",
+    "operationCount": 3,
+    "convention": "0x46000102",
+    "dataWords": 2,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bb",
+    "packingSlots": 2,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_BITMAP",
+    "initHandler": "Bitmap_Render",
+    "initSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 3591,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L3591"
+    },
+    "execHandler": "Exec_Bitmap_Render",
+    "execSource": {
+      "file": "werkkzeug3/genbitmap.cpp",
+      "line": 3581,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genbitmap.cpp#L3581"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 84,
+      "init_handler": "Bitmap_Render",
+      "exec_handler": "Exec_Bitmap_Render",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L84"
+    }
+  },
+  {
+    "classIndex": 61,
+    "id": 197,
+    "idHex": "0x00c5",
+    "name": "Particles",
+    "operationCount": 39,
+    "convention": "0x8010021e",
+    "dataWords": 30,
+    "inputSlots": 2,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 1,
+    "packing": "sibgggggggggfgggffffffffffffff",
+    "packingSlots": 30,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SCENE",
+    "initHandler": "Init_Scene_Particles",
+    "initSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 1490,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L1490"
+    },
+    "execHandler": "Exec_Scene_Particles",
+    "execSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 1512,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L1512"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 173,
+      "init_handler": "Init_Scene_Particles",
+      "exec_handler": "Exec_Scene_Particles",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L173"
+    }
+  },
+  {
+    "classIndex": 62,
+    "id": 308,
+    "idHex": "0x0134",
+    "name": "Explode",
+    "operationCount": 46,
+    "convention": "0x86000215",
+    "dataWords": 21,
+    "inputSlots": 2,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "fffffffffffffffbfffff",
+    "packingSlots": 21,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_Explode",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 3583,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L3583"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 243,
+      "init_handler": "MinMesh_Explode",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L243"
+    }
+  },
+  {
+    "classIndex": 63,
+    "id": 307,
+    "idHex": "0x0133",
+    "name": "Font3D",
+    "operationCount": 29,
+    "convention": "0x86020003",
+    "dataWords": 3,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 2,
+    "splineSlots": 0,
+    "packing": "ggg",
+    "packingSlots": 3,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_Font3D",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 4842,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L4842"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 242,
+      "init_handler": "MinMesh_Font3D",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L242"
+    }
+  },
+  {
+    "classIndex": 64,
+    "id": 288,
+    "idHex": "0x0120",
+    "name": "Transform",
+    "operationCount": 63,
+    "convention": "0x0600010a",
+    "dataWords": 10,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bGGGGGGGGG",
+    "packingSlots": 10,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_TransformEx",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 2433,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L2433"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 224,
+      "init_handler": "MinMesh_TransformEx",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L224"
+    }
+  },
+  {
+    "classIndex": 65,
+    "id": 293,
+    "idHex": "0x0125",
+    "name": "Bend 2",
+    "operationCount": 2,
+    "convention": "0x06000108",
+    "dataWords": 8,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "fffeeeff",
+    "packingSlots": 8,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_Bend2",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 2569,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L2569"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 229,
+      "init_handler": "MinMesh_Bend2",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L229"
+    }
+  },
+  {
+    "classIndex": 66,
+    "id": 305,
+    "idHex": "0x0131",
+    "name": "Center",
+    "operationCount": 24,
+    "convention": "0x06000101",
+    "dataWords": 1,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "b",
+    "packingSlots": 1,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_Center",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 5441,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L5441"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 240,
+      "init_handler": "MinMesh_Center",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L240"
+    }
+  },
+  {
+    "classIndex": 67,
+    "id": 279,
+    "idHex": "0x0117",
+    "name": "MatInput",
+    "operationCount": 33,
+    "convention": "0x06000202",
+    "dataWords": 2,
+    "inputSlots": 2,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bb",
+    "packingSlots": 2,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_MatLink",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 2226,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L2226"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 222,
+      "init_handler": "MinMesh_MatLink",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L222"
+    }
+  },
+  {
+    "classIndex": 68,
+    "id": 13,
+    "idHex": "0x000d",
+    "name": "Demo",
+    "operationCount": 23,
+    "convention": "0xa5000000",
+    "dataWords": 0,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_DEMO",
+    "initHandler": "Init_Misc_Demo",
+    "initSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 3074,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L3074"
+    },
+    "execHandler": "Exec_Misc_Demo",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 3094,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L3094"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 34,
+      "init_handler": "Init_Misc_Demo",
+      "exec_handler": "Exec_Misc_Demo",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L34"
+    }
+  },
+  {
+    "classIndex": 69,
+    "id": 210,
+    "idHex": "0x00d2",
+    "name": "MatHack",
+    "operationCount": 16,
+    "convention": "0x00001000",
+    "dataWords": 0,
+    "inputSlots": 0,
+    "linkSlots": 1,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SCENE",
+    "initHandler": "Init_Scene_MatHack",
+    "initSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 1354,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L1354"
+    },
+    "execHandler": "Exec_Scene_MatHack",
+    "execSource": {
+      "file": "werkkzeug3/genscene.cpp",
+      "line": 1361,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genscene.cpp#L1361"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 187,
+      "init_handler": "Init_Scene_MatHack",
+      "exec_handler": "Exec_Scene_MatHack",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L187"
+    }
+  },
+  {
+    "classIndex": 70,
+    "id": 275,
+    "idHex": "0x0113",
+    "name": "Select Cube",
+    "operationCount": 10,
+    "convention": "0x06000107",
+    "dataWords": 7,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bffffff",
+    "packingSlots": 7,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_SelectCube",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 2325,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L2325"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 218,
+      "init_handler": "MinMesh_SelectCube",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L218"
+    }
+  },
+  {
+    "classIndex": 71,
+    "id": 292,
+    "idHex": "0x0124",
+    "name": "Perlin Displace",
+    "operationCount": 8,
+    "convention": "0x0600010d",
+    "dataWords": 13,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bFFFEEEFFFFFF",
+    "packingSlots": 13,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_Perlin",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 2476,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L2476"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 228,
+      "init_handler": "MinMesh_Perlin",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L228"
+    }
+  },
+  {
+    "classIndex": 72,
+    "id": 289,
+    "idHex": "0x0121",
+    "name": "TransEx",
+    "operationCount": 51,
+    "convention": "0x0600010c",
+    "dataWords": 12,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "iGGGGGGFFFbb",
+    "packingSlots": 12,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_TransformEx",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 2433,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L2433"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 225,
+      "init_handler": "MinMesh_TransformEx",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L225"
+    }
+  },
+  {
+    "classIndex": 73,
+    "id": 273,
+    "idHex": "0x0111",
+    "name": "Add",
+    "operationCount": 9,
+    "convention": "0x87000000",
+    "dataWords": 0,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_Add",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 2272,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L2272"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 216,
+      "init_handler": "MinMesh_Add",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L216"
+    }
+  },
+  {
+    "classIndex": 74,
+    "id": 303,
+    "idHex": "0x012f",
+    "name": "Multiply",
+    "operationCount": 7,
+    "convention": "0x46000111",
+    "dataWords": 17,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "GGGGGGFFFbbGGGGGGF",
+    "packingSlots": 18,
+    "packingOverrunWords": 1,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_Multiply",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 5303,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L5303"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 238,
+      "init_handler": "MinMesh_Multiply",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L238"
+    }
+  },
+  {
+    "classIndex": 75,
+    "id": 296,
+    "idHex": "0x0128",
+    "name": "BoneChain",
+    "operationCount": 16,
+    "convention": "0x06000108",
+    "dataWords": 8,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "ffffffib",
+    "packingSlots": 8,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_BoneChain",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 2621,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L2621"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 232,
+      "init_handler": "MinMesh_BoneChain",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L232"
+    }
+  },
+  {
+    "classIndex": 76,
+    "id": 297,
+    "idHex": "0x0129",
+    "name": "BoneTrain",
+    "operationCount": 16,
+    "convention": "0x86000203",
+    "dataWords": 3,
+    "inputSlots": 2,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "fbf",
+    "packingSlots": 3,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_BoneTrain",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 2702,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L2702"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 233,
+      "init_handler": "MinMesh_BoneTrain",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L233"
+    }
+  },
+  {
+    "classIndex": 77,
+    "id": 257,
+    "idHex": "0x0101",
+    "name": "Grid",
+    "operationCount": 9,
+    "convention": "0x06000003",
+    "dataWords": 3,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbb",
+    "packingSlots": 3,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_Grid",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 1616,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L1616"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 208,
+      "init_handler": "MinMesh_Grid",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L208"
+    }
+  },
+  {
+    "classIndex": 78,
+    "id": 298,
+    "idHex": "0x012a",
+    "name": "Triangulate",
+    "operationCount": 1,
+    "convention": "0x06000100",
+    "dataWords": 0,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_Triangulate",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 3259,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L3259"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 234,
+      "init_handler": "MinMesh_Triangulate",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L234"
+    }
+  },
+  {
+    "classIndex": 79,
+    "id": 115,
+    "idHex": "0x0073",
+    "name": "Water",
+    "operationCount": 1,
+    "convention": "0x80001106",
+    "dataWords": 6,
+    "inputSlots": 1,
+    "linkSlots": 1,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "fffffi",
+    "packingSlots": 6,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_EFFECT",
+    "initHandler": "Init_Effect_Water",
+    "initSource": {
+      "file": "werkkzeug3/geneffect.cpp",
+      "line": 163,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/geneffect.cpp#L163"
+    },
+    "execHandler": "Exec_Effect_Water",
+    "execSource": {
+      "file": "werkkzeug3/geneffect.cpp",
+      "line": 206,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/geneffect.cpp#L206"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 109,
+      "init_handler": "Init_Effect_Water",
+      "exec_handler": "Exec_Effect_Water",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L109"
+    }
+  },
+  {
+    "classIndex": 80,
+    "id": 22,
+    "idHex": "0x0016",
+    "name": "EventTime",
+    "operationCount": 1,
+    "convention": "0x00000100",
+    "dataWords": 0,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_ANY",
+    "initHandler": "Init_Misc_EventTime",
+    "initSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2599,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2599"
+    },
+    "execHandler": "Exec_Misc_EventTime",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2650,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2650"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 37,
+      "init_handler": "Init_Misc_EventTime",
+      "exec_handler": "Exec_Misc_EventTime",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L37"
+    }
+  },
+  {
+    "classIndex": 81,
+    "id": 260,
+    "idHex": "0x0104",
+    "name": "Sphere",
+    "operationCount": 1,
+    "convention": "0x06000002",
+    "dataWords": 2,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bb",
+    "packingSlots": 2,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_Sphere",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 1756,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L1756"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 211,
+      "init_handler": "MinMesh_Sphere",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L211"
+    }
+  },
+  {
+    "classIndex": 82,
+    "id": 276,
+    "idHex": "0x0114",
+    "name": "Delete Faces",
+    "operationCount": 1,
+    "convention": "0x06000100",
+    "dataWords": 0,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_DeleteFaces",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 2404,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L2404"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 219,
+      "init_handler": "MinMesh_DeleteFaces",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L219"
+    }
+  },
+  {
+    "classIndex": 83,
+    "id": 28,
+    "idHex": "0x001c",
+    "name": "SplineScale",
+    "operationCount": 2,
+    "convention": "0x40000104",
+    "dataWords": 4,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "fffb",
+    "packingSlots": 4,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SPLINE",
+    "initHandler": "Init_Misc_SplineScale",
+    "initSource": {
+      "file": "werkkzeug3/genblobspline.cpp",
+      "line": 802,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genblobspline.cpp#L802"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 51,
+      "init_handler": "Init_Misc_SplineScale",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L51"
+    }
+  },
+  {
+    "classIndex": 84,
+    "id": 135,
+    "idHex": "0x0087",
+    "name": "Subdivide",
+    "operationCount": 2,
+    "convention": "0x46000103",
+    "dataWords": 3,
+    "inputSlots": 1,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bEb",
+    "packingSlots": 3,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MESH",
+    "initHandler": "Mesh_Subdivide",
+    "initSource": {
+      "file": "werkkzeug3/genmesh.cpp",
+      "line": 3280,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genmesh.cpp#L3280"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 126,
+      "init_handler": "Mesh_Subdivide",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L126"
+    }
+  },
+  {
+    "classIndex": 85,
+    "id": 26,
+    "idHex": "0x001a",
+    "name": "PipeSpline",
+    "operationCount": 31,
+    "convention": "0x40080000",
+    "dataWords": 0,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "",
+    "packingSlots": 0,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_SPLINE",
+    "initHandler": "Init_Misc_PipeSpline",
+    "initSource": {
+      "file": "werkkzeug3/genblobspline.cpp",
+      "line": 697,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genblobspline.cpp#L697"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 49,
+      "init_handler": "Init_Misc_PipeSpline",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L49"
+    }
+  },
+  {
+    "classIndex": 86,
+    "id": 300,
+    "idHex": "0x012c",
+    "name": "Pipe",
+    "operationCount": 31,
+    "convention": "0x86000404",
+    "dataWords": 4,
+    "inputSlots": 4,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bfff",
+    "packingSlots": 4,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_MINMESH",
+    "initHandler": "MinMesh_Pipe",
+    "initSource": {
+      "file": "werkkzeug3/genminmesh.cpp",
+      "line": 5082,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genminmesh.cpp#L5082"
+    },
+    "execHandler": "Exec_Misc_Nop",
+    "execSource": {
+      "file": "werkkzeug3/kdoc.cpp",
+      "line": 2611,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/kdoc.cpp#L2611"
+    },
+    "dynamic": false,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 235,
+      "init_handler": "MinMesh_Pipe",
+      "exec_handler": "Exec_Misc_Nop",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L235"
+    }
+  },
+  {
+    "classIndex": 87,
+    "id": 116,
+    "idHex": "0x0074",
+    "name": "Glare",
+    "operationCount": 16,
+    "convention": "0x0000000b",
+    "dataWords": 11,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bbcccffffff",
+    "packingSlots": 11,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_EFFECT",
+    "initHandler": "Init_Effect_Glare",
+    "initSource": {
+      "file": "werkkzeug3/geneffectipp.cpp",
+      "line": 262,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/geneffectipp.cpp#L262"
+    },
+    "execHandler": "Exec_Effect_Glare",
+    "execSource": {
+      "file": "werkkzeug3/geneffectipp.cpp",
+      "line": 285,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/geneffectipp.cpp#L285"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 110,
+      "init_handler": "Init_Effect_Glare",
+      "exec_handler": "Exec_Effect_Glare",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L110"
+    }
+  },
+  {
+    "classIndex": 88,
+    "id": 117,
+    "idHex": "0x0075",
+    "name": "Color Correction",
+    "operationCount": 12,
+    "convention": "0x0000000b",
+    "dataWords": 11,
+    "inputSlots": 0,
+    "linkSlots": 0,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bffccccbccf",
+    "packingSlots": 11,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_EFFECT",
+    "initHandler": "Init_Effect_ColorCorrection",
+    "initSource": {
+      "file": "werkkzeug3/geneffectipp.cpp",
+      "line": 526,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/geneffectipp.cpp#L526"
+    },
+    "execHandler": "Exec_Effect_ColorCorrection",
+    "execSource": {
+      "file": "werkkzeug3/geneffectipp.cpp",
+      "line": 540,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/geneffectipp.cpp#L540"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 111,
+      "init_handler": "Init_Effect_ColorCorrection",
+      "exec_handler": "Exec_Effect_ColorCorrection",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L111"
+    }
+  },
+  {
+    "classIndex": 89,
+    "id": 233,
+    "idHex": "0x00e9",
+    "name": "Layer2D",
+    "operationCount": 1,
+    "convention": "0x8000110b",
+    "dataWords": 11,
+    "inputSlots": 1,
+    "linkSlots": 1,
+    "stringSlots": 0,
+    "splineSlots": 0,
+    "packing": "bfffffffffb",
+    "packingSlots": 11,
+    "packingOverrunWords": 0,
+    "outputClass": "KC_IPP",
+    "initHandler": "Init_IPP_Layer2D",
+    "initSource": {
+      "file": "werkkzeug3/genoverlay.cpp",
+      "line": 921,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genoverlay.cpp#L921"
+    },
+    "execHandler": "Exec_IPP_Layer2D",
+    "execSource": {
+      "file": "werkkzeug3/genoverlay.cpp",
+      "line": 1498,
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/genoverlay.cpp#L1498"
+    },
+    "dynamic": true,
+    "dispatchSource": {
+      "file": "werkkzeug3/player_demo/demo_oplist.cpp",
+      "line": 200,
+      "init_handler": "Init_IPP_Layer2D",
+      "exec_handler": "Exec_IPP_Layer2D",
+      "url": "https://github.com/farbrausch/fr_public/blob/3e333cf720be7f3cdc311bbe98939a70e7d60edb/werkkzeug3/player_demo/demo_oplist.cpp#L200"
+    }
+  }
+]

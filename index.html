@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fr-041: debris. by farbrausch</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #050504; }
+  body { font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #ddd; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0;
+    transition: opacity 1.2s ease; }
+  canvas.visible { opacity: 1; }
+  #loader { position: absolute; inset: 0; z-index: 2; display: none; background: #000; }
+  #loader.visible { display: block; }
+  #loader-frame { position: absolute; left: 20px; right: 20px; top: calc(50% - 20px);
+    height: 40px; padding: 3px; background: #fff; }
+  #loader-track { width: 100%; height: 100%; padding: 3px; background: #000; }
+  #loader-fill { width: 1px; height: 100%; background: #fff; }
+  #backdrop { position: absolute; inset: 0; pointer-events: none;
+    background:
+      linear-gradient(rgba(0,0,0,.04), rgba(0,0,0,.04)),
+      #111 url('./assets/launcher-background.jpg') center / cover no-repeat;
+    transition: opacity 1s ease; }
+  #launcher { position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    user-select: none; transition: opacity .75s ease; }
+  #launcher.hidden { opacity: 0; pointer-events: none; }
+  .mark { position: relative; padding: 48px 60px 55px; }
+  h1 { margin: 0; color: #fff; font: 300 clamp(46px, 8vw, 112px)/.88 Arial, sans-serif;
+    letter-spacing: .19em; text-transform: lowercase;
+    text-shadow: 0 2px 3px rgba(0,0,0,.78), 0 0 9px rgba(0,0,0,.5); }
+  h1 .number { display: block; margin: 0 0 15px .2em; color: #eee; font: 11px/1 monospace;
+    letter-spacing: .62em; text-transform: uppercase; }
+  .group { margin: 23px 0 0; color: #fafafa; letter-spacing: .48em; text-transform: uppercase; }
+  .meta { margin: 5px 0 0; color: #e2e2e2; letter-spacing: .14em; }
+  .credits { margin-top: 24px; color: #d0d0d0; font-size: 10px; letter-spacing: .05em; }
+  .credits b { color: #fff; font-weight: 400; }
+  .group, .meta, .credits, #start, #help {
+    text-shadow: 0 1px 2px rgba(0,0,0,.72), 0 0 5px rgba(0,0,0,.48); }
+  #start { margin-top: 24px; padding: 9px 3px; border: 0; border-bottom: 1px solid #e8e8e8;
+    color: #fff; background: none; cursor: pointer; font: 11px/1 monospace;
+    letter-spacing: .42em; text-transform: uppercase; transition: color .2s, border-color .2s; }
+  #start:hover, #start:focus-visible { color: #fff; border-color: #fff; outline: none; }
+  #start:disabled { cursor: wait; color: #77746d; border-color: #69665f; }
+  #help { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+    color: #d0d0d0; font-size: 10px; letter-spacing: .16em; transition: color .2s; }
+  #launcher:not(.hidden) #help { color: #d0d0d0; }
+  #help a { display: inline-block; margin-top: 5px; color: #eee; text-decoration: none;
+    transition: color .2s; }
+  #help a:hover, #help a:focus-visible { color: #fff; }
+  #status { position: absolute; left: 16px; bottom: 12px; color: #aaa; font-size: 10px;
+    letter-spacing: .1em; text-shadow: 0 1px 3px #000; }
+  #status:empty { display: none; }
+  #debug { position: absolute; right: 12px; top: 10px; color: #ccc; font-size: 10px;
+    white-space: pre; text-align: right; text-shadow: 0 1px 3px #000; display: none; }
+  #debug.visible { display: block; }
+</style>
+</head>
+<body>
+<div id="backdrop"></div>
+<canvas id="screen"></canvas>
+<div id="loader" aria-hidden="true">
+  <div id="loader-frame">
+    <div id="loader-track" role="progressbar" aria-label="Precalculating textures and geometry"
+      aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="loader-fill"></div></div>
+  </div>
+</div>
+<div id="launcher">
+  <main class="mark">
+    <h1><span class="number">fr–041</span>debris.</h1>
+    <div class="group">farbrausch</div>
+    <div class="meta">177kb demo · breakpoint 2007</div>
+    <div class="credits"><b>fiver2</b> visuals &amp; direction · <b>chaos / ryg</b> code · <b>ronny</b> soundtrack<br>
+      <b>kb</b> synthesizer · <b>wayfinder</b> sound effects · <b>giZMo / tron / fried</b></div>
+    <button id="start" type="button">start</button>
+  </main>
+  <div id="help">space pause · ← → seek · f fullscreen · esc stop<br>
+    <a href="https://github.com/demoports/fr-041_debris" target="_blank" rel="noopener noreferrer">github</a>
+  </div>
+</div>
+<div id="status"></div>
+<div id="debug"></div>
+
+<script type="module">
+import { DebrisApp, telemetryPublishDue } from './src/app.js';
+
+(() => {
+  'use strict';
+  const canvas = document.querySelector('#screen');
+  const launcher = document.querySelector('#launcher');
+  const backdrop = document.querySelector('#backdrop');
+  const loader = document.querySelector('#loader');
+  const loaderTrack = document.querySelector('#loader-track');
+  const loaderFill = document.querySelector('#loader-fill');
+  const button = document.querySelector('#start');
+  const status = document.querySelector('#status');
+  const debug = document.querySelector('#debug');
+  const query = new URLSearchParams(location.search);
+  const STATS_PUBLISH_INTERVAL_MS = 250;
+  let app = null, starting = false, wakeLock = null, wakeLockRequest = null;
+  let wakeLockGeneration = 0, showStats = query.has('stats');
+  let lastStatsPublishedAt = -Infinity;
+  let loaderProgress = 0, loaderPaintedAt = -Infinity;
+  let resizeFrame = 0;
+
+  function paintLoaderProgress(force = false) {
+    if (!loader.classList.contains('visible')) return;
+    const now = performance.now();
+    if (!force && loaderProgress < 1 && now < loaderPaintedAt + 450) return;
+    loaderPaintedAt = now;
+    // clientWidth includes the track's two 3px insets; the fill occupies its
+    // content box, matching native r[2] rather than overflowing into r[1].
+    const width = Math.max(1, loaderTrack.clientWidth - 6);
+    loaderFill.style.width = `${1 + loaderProgress * (width - 1)}px`;
+    loaderTrack.setAttribute('aria-valuenow', String(Math.round(loaderProgress * 100)));
+    document.documentElement.dataset.debrisLoadProgress = String(loaderProgress);
+  }
+  function setLoadProgress(value, force = false) {
+    loaderProgress = Math.max(0, Math.min(1, Number(value) || 0));
+    paintLoaderProgress(force || loaderProgress === 0 || loaderProgress === 1);
+  }
+  function setLoading(loading) {
+    loader.classList.toggle('visible', loading);
+    loader.setAttribute('aria-hidden', String(!loading));
+    if (loading) {
+      loaderPaintedAt = -Infinity;
+      setLoadProgress(0, true);
+    }
+  }
+  function setStatus(message) {
+    status.textContent = message || '';
+    document.documentElement.dataset.debrisStatus = message || '';
+    const progress = /^precalculating textures and geometry…\s*(\d+)%$/.exec(message || '');
+    if (progress) setLoadProgress(Number(progress[1]) / 100);
+    else if (/^(pruning|preparing|warming|starting audio)/.test(message || '')) {
+      setLoadProgress(1, true);
+    }
+  }
+  function setRunning(running) {
+    launcher.classList.toggle('hidden', running);
+    canvas.classList.toggle('visible', running);
+    backdrop.style.opacity = running ? '0' : '1';
+  }
+  async function lockScreen() {
+    if (!('wakeLock' in navigator) || wakeLock) return;
+    if (wakeLockRequest) {
+      try { await wakeLockRequest; } catch (_) {}
+      return;
+    }
+    const generation = wakeLockGeneration;
+    let request = null;
+    let retry = false;
+    try {
+      request = navigator.wakeLock.request('screen');
+      wakeLockRequest = request;
+      const lock = await request;
+      if (generation !== wakeLockGeneration || !app) {
+        retry = Boolean(app);
+        await lock.release().catch(() => {});
+        return;
+      }
+      wakeLock = lock;
+      lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; });
+    } catch (_) {
+      if (generation === wakeLockGeneration) wakeLock = null;
+    } finally {
+      if (wakeLockRequest === request) wakeLockRequest = null;
+      if (retry) lockScreen();
+    }
+  }
+  function unlockScreen() {
+    wakeLockGeneration++;
+    if (wakeLock) wakeLock.release().catch(() => {});
+    wakeLock = null;
+  }
+  function updateStats(stats, _sourceApp = app, telemetry = {}) {
+    if (_sourceApp !== app) return;
+    const now = performance.now();
+    if (!telemetryPublishDue(
+      lastStatsPublishedAt, now, showStats, telemetry.forceTelemetry,
+      STATS_PUBLISH_INTERVAL_MS,
+    )) return;
+    lastStatsPublishedAt = now;
+    document.documentElement.dataset.debrisState = 'rendered';
+    document.documentElement.dataset.debrisSample = String(stats.sample || 0);
+    document.documentElement.dataset.debrisDraws = String(stats.drawCalls || 0);
+    document.documentElement.dataset.debrisTriangles = String(stats.triangles || 0);
+    document.documentElement.dataset.debrisFrameMs = String(stats.frameMilliseconds || 0);
+    document.documentElement.dataset.debrisRuntimeMs = String(stats.runtimeMilliseconds || 0);
+    document.documentElement.dataset.debrisRenderMs = String(stats.renderMilliseconds || 0);
+    document.documentElement.dataset.debrisPrecalcMs = String(stats.precalcMilliseconds || 0);
+    document.documentElement.dataset.debrisLoaderAudioBackend = String(
+      stats.loaderAudioBackend || 'disabled',
+    );
+    document.documentElement.dataset.debrisLoaderAudioQueueBytes = String(
+      stats.loaderAudioQueueBytes || 0,
+    );
+    document.documentElement.dataset.debrisLoaderAudioUnderruns = String(
+      stats.loaderAudioUnderruns || 0,
+    );
+    document.documentElement.dataset.debrisLoaderAudioErrors = String(
+      stats.loaderAudioErrors || 0,
+    );
+    document.documentElement.dataset.debrisSeekMs = String(stats.seekMilliseconds || 0);
+    document.documentElement.dataset.debrisHeapBytes = String(stats.jsHeapUsedBytes || 0);
+    document.documentElement.dataset.debrisHeapTotalBytes = String(stats.jsHeapTotalBytes || 0);
+    document.documentElement.dataset.debrisSnapshotBytes = String(stats.snapshotBytes || 0);
+    document.documentElement.dataset.debrisResourceBytes = String(
+      stats.resources?.totalEstimatedBytes || 0,
+    );
+    document.documentElement.dataset.debrisRuntimeCacheBytes = String(
+      stats.resources?.runtime?.estimatedBytes || 0,
+    );
+    document.documentElement.dataset.debrisBitmapCacheBytes = String(
+      stats.resources?.runtime?.bitmapBytes || 0,
+    );
+    document.documentElement.dataset.debrisMeshCacheBytes = String(
+      stats.resources?.runtime?.meshBytes || 0,
+    );
+    document.documentElement.dataset.debrisPreparedMeshCacheBytes = String(
+      stats.resources?.runtime?.preparedMeshBytes || 0,
+    );
+    document.documentElement.dataset.debrisCacheIdentities = String(
+      stats.resources?.runtime?.identities || 0,
+    );
+    const pruning = stats.resources?.runtime?.pruning;
+    document.documentElement.dataset.debrisPrunedCacheIdentities = String(
+      pruning?.releasedIdentities || 0,
+    );
+    document.documentElement.dataset.debrisPrunedCacheReferences = String(
+      pruning?.clearedReferences || 0,
+    );
+    document.documentElement.dataset.debrisPrunedCacheBytes = String(
+      pruning?.estimatedReclaimableBytes || 0,
+    );
+    document.documentElement.dataset.debrisRetainedCacheBytes = String(
+      pruning?.retainedKnownBytes || 0,
+    );
+    const playbackGeometry = stats.resources?.runtime?.playbackGeometry || stats.playbackGeometry;
+    document.documentElement.dataset.debrisPlaybackGeometryIdentities = String(
+      playbackGeometry?.prepared || 0,
+    );
+    document.documentElement.dataset.debrisPlaybackGeometryMarkedIdentities = String(
+      playbackGeometry?.marked || 0,
+    );
+    document.documentElement.dataset.debrisPlaybackGeometryQueuedIdentities = String(
+      playbackGeometry?.queued || 0,
+    );
+    document.documentElement.dataset.debrisPlaybackGeometryPendingIdentities = String(
+      playbackGeometry?.pendingIdentities || 0,
+    );
+    document.documentElement.dataset.debrisPlaybackGeometryReleasedIdentities = String(
+      playbackGeometry?.releasedIdentities || 0,
+    );
+    document.documentElement.dataset.debrisPlaybackGeometryAliasReferences = String(
+      playbackGeometry?.candidateReferences || 0,
+    );
+    document.documentElement.dataset.debrisPlaybackGeometrySharedIdentities = String(
+      playbackGeometry?.sharedCandidateIdentities || 0,
+    );
+    document.documentElement.dataset.debrisReleasedTopologyBytes = String(
+      playbackGeometry?.releasedTopologyBytes || 0,
+    );
+    document.documentElement.dataset.debrisReclaimableTopologyBytes = String(
+      playbackGeometry?.potentiallyReclaimableTopologyBytes || 0,
+    );
+    document.documentElement.dataset.debrisPendingTopologyBytes = String(
+      playbackGeometry?.pendingReclaimableTopologyBytes || 0,
+    );
+    document.documentElement.dataset.debrisRetainedSharedTopologyBytes = String(
+      playbackGeometry?.retainedSharedTopologyBytes || 0,
+    );
+    document.documentElement.dataset.debrisPreparedGeometryBytes = String(
+      playbackGeometry?.preparedGeometryBytes || 0,
+    );
+    document.documentElement.dataset.debrisDeferredPreparedGeometryBytes = String(
+      playbackGeometry?.deferredPreparedGeometryBytes || 0,
+    );
+    document.documentElement.dataset.debrisGeometryConversionNetBytes = String(
+      playbackGeometry?.conversionNetBytes || 0,
+    );
+    document.documentElement.dataset.debrisPlaybackGeometryNetBytes = String(
+      playbackGeometry?.estimatedNetBytes || 0,
+    );
+    document.documentElement.dataset.debrisUncapturedGeometryIdentities = String(
+      playbackGeometry?.uncapturedExecutionIdentities || 0,
+    );
+    document.documentElement.dataset.debrisAnimatedGeometryIdentities = String(
+      playbackGeometry?.animatedIdentities || 0,
+    );
+    const geometryResources = stats.resources?.geometry;
+    document.documentElement.dataset.debrisGeometryCacheEntries = String(
+      geometryResources?.entries || 0,
+    );
+    document.documentElement.dataset.debrisAnimatedGeometryCacheEntries = String(
+      geometryResources?.animatedEntries || 0,
+    );
+    document.documentElement.dataset.debrisGeometryGpuBytes = String(
+      geometryResources?.gpuBytes || 0,
+    );
+    document.documentElement.dataset.debrisGeometryCpuBytes = String(
+      geometryResources?.cpuReferencedBytes || 0,
+    );
+    document.documentElement.dataset.debrisShadowTopologyBytes = String(
+      geometryResources?.shadowBytes || 0,
+    );
+    document.documentElement.dataset.debrisTextureCacheEntries = String(
+      stats.resources?.textures?.bitmapTextures || 0,
+    );
+    document.documentElement.dataset.debrisTextureGpuBytes = String(
+      stats.resources?.textures?.estimatedBytes || 0,
+    );
+    const topology = stats.resources?.geometry?.diagnostics;
+    document.documentElement.dataset.debrisTopologyTriangles = String(topology?.triangleCount || 0);
+    document.documentElement.dataset.debrisDegenerateTriangles = String(topology?.degenerateTriangles || 0);
+    document.documentElement.dataset.debrisDuplicateTriangles = String(topology?.duplicateTriangles || 0);
+    document.documentElement.dataset.debrisOppositeDuplicateTriangles = String(topology?.oppositeDuplicateTriangles || 0);
+    document.documentElement.dataset.debrisSameOrientationDuplicateTriangles = String(topology?.sameOrientationDuplicateTriangles || 0);
+    document.documentElement.dataset.debrisExactDuplicateTriangles = String(topology?.exactDuplicateTriangles || 0);
+    document.documentElement.dataset.debrisExactOppositeDuplicateTriangles = String(topology?.exactOppositeDuplicateTriangles || 0);
+    document.documentElement.dataset.debrisExactSameOrientationDuplicateTriangles = String(topology?.exactSameOrientationDuplicateTriangles || 0);
+    document.documentElement.dataset.debrisNearOnlyDuplicateTriangles = String(topology?.nearOnlyDuplicateTriangles || 0);
+    document.documentElement.dataset.debrisNearOnlySameOrientationDuplicateTriangles = String(topology?.nearOnlySameOrientationDuplicateTriangles || 0);
+    document.documentElement.dataset.debrisExactSameGroupIdenticalAttributeTriangles = String(topology?.exactSameGroupIdenticalAttributeTriangles || 0);
+    document.documentElement.dataset.debrisExactSameGroupAttributeVariantTriangles = String(topology?.exactSameGroupAttributeVariantTriangles || 0);
+    document.documentElement.dataset.debrisExactCrossGroupSameMaterialTriangles = String(topology?.exactCrossGroupSameMaterialTriangles || 0);
+    document.documentElement.dataset.debrisExactCrossMaterialTriangles = String(topology?.exactCrossMaterialTriangles || 0);
+    document.documentElement.dataset.debrisExactDegenerateSameOrientationTriangles = String(topology?.exactDegenerateSameOrientationTriangles || 0);
+    document.documentElement.dataset.debrisAuditedTriangles = String(topology?.auditedTriangles || 0);
+    document.documentElement.dataset.debrisUnauditedTopologyTriangles = String(topology?.unauditedTriangles || 0);
+    document.documentElement.dataset.debrisTruncatedTopologyEntries = String(topology?.truncatedEntries || 0);
+    document.documentElement.dataset.debrisIndeterminateWinding = String(topology?.indeterminateWinding || 0);
+    document.documentElement.dataset.debrisTopologyOffenderCount = String(topology?.offenderCount || 0);
+    document.documentElement.dataset.debrisUnexpectedWinding = String(topology?.unexpectedWinding || 0);
+    document.documentElement.dataset.debrisNormalAlignedWinding = String(topology?.normalAlignedWinding || 0);
+    document.documentElement.dataset.debrisNormalOpposedWinding = String(topology?.normalOpposedWinding || 0);
+    document.documentElement.dataset.debrisTopologyOffenders = JSON.stringify(topology?.offenders || []);
+    document.documentElement.dataset.debrisShadowBoundaryEdges = String(topology?.shadowBoundaryEdges || 0);
+    document.documentElement.dataset.debrisShadowNonmanifoldEdges = String(topology?.shadowNonManifoldEdges || 0);
+    document.documentElement.dataset.debrisShadowWindingConflictEdges = String(topology?.shadowWindingConflictEdges || 0);
+    document.documentElement.dataset.debrisShadowMaxEdgeIncidence = String(topology?.shadowMaxEdgeIncidence || 0);
+    document.documentElement.dataset.debrisCandidateLightItems = String(stats.culling?.candidateLightItems || 0);
+    document.documentElement.dataset.debrisCulledLightItems = String(stats.culling?.culledLightItems || 0);
+    document.documentElement.dataset.debrisCandidateShadowItems = String(stats.culling?.candidateShadowItems || 0);
+    document.documentElement.dataset.debrisCulledShadowSphereItems = String(stats.culling?.culledShadowSphereItems || 0);
+    document.documentElement.dataset.debrisCulledShadowFrustumItems = String(stats.culling?.culledShadowFrustumItems || 0);
+    if (!showStats) { debug.classList.remove('visible'); return; }
+    const fps = stats.startedAt ? stats.frames * 1000 / Math.max(1, now - stats.startedAt) : 0;
+    const heapBytes = Number(stats.jsHeapUsedBytes) || 0;
+    const resourceBytes = Number(stats.resources?.totalEstimatedBytes) || 0;
+    const heapLabel = heapBytes > 0
+      ? `JS heap ≈${(heapBytes / 1048576).toFixed(1)} MiB`
+      : 'JS heap unavailable';
+    const resourceLabel = `resource estimate ≈${(resourceBytes / 1048576).toFixed(1)} MiB (may overlap heap)`;
+    debug.textContent = `${stats.seconds?.toFixed(2) || '0.00'} s\n${fps.toFixed(1)} fps\n${(stats.frameMilliseconds || 0).toFixed(1)} ms frame\n${stats.drawCalls || 0} draws\n${Math.round(stats.triangles || 0).toLocaleString()} tris\n${heapLabel}\n${resourceLabel}`;
+    debug.classList.add('visible');
+  }
+  async function begin() {
+    if (starting || app) return;
+    document.documentElement.dataset.debrisState = 'starting';
+    lastStatsPublishedAt = -Infinity;
+    starting = true; button.disabled = true; setRunning(true);
+    setLoading(true);
+    try {
+      app = new DebrisApp(canvas, setStatus, {
+        maxPixelRatio: 2,
+        resourceTelemetry: showStats,
+        onStart: () => { lockScreen(); },
+        onFrame: updateStats,
+        onEnd: () => finish(),
+      });
+      window.__debris = app;
+      await app.start();
+      setLoading(false);
+    } catch (error) {
+      const cancelled = error?.name === 'AbortError';
+      if (cancelled) {
+        document.documentElement.dataset.debrisState = 'launcher';
+        setStatus('');
+      } else {
+        console.error(error);
+        document.documentElement.dataset.debrisState = 'error';
+        setStatus(error.message);
+      }
+      if (app) app.dispose();
+      app = null; window.__debris = null; setLoading(false); setRunning(false);
+    } finally {
+      starting = false;
+      button.disabled = false;
+    }
+  }
+  function finish() {
+    if (app) { const old = app; app = null; if (window.__debris === old) window.__debris = null; old.dispose(); }
+    unlockScreen(); setLoading(false); setRunning(false); debug.classList.remove('visible');
+  }
+  function flash(message) {
+    setStatus(message); const expected = message;
+    setTimeout(() => { if (status.textContent === expected) setStatus(''); }, 1300);
+  }
+  function redrawStaticFrame() {
+    if (!app || (app.running && !app.paused) || resizeFrame) return;
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = 0;
+      try { app?.redraw?.(); }
+      catch (error) { console.error(error); setStatus(error.message); }
+    });
+  }
+  function formatTime(seconds) {
+    seconds = Math.max(0, Math.round(seconds));
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  }
+
+  button.addEventListener('click', begin);
+  addEventListener('keydown', async event => {
+    if (event.key === 'Escape') { if (app) finish(); return; }
+    if ((event.key === 'Enter' || event.key === ' ') && !app) { event.preventDefault(); begin(); return; }
+    if (!app) return;
+    if (event.key === ' ') { event.preventDefault(); flash(app.pause() ? 'paused' : 'playing'); }
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      const delta = event.key === 'ArrowLeft' ? -5 : 5;
+      try {
+        const time = await app.seek(delta);
+        flash(`${delta < 0 ? '◀' : '▶'} ${formatTime(time)}`);
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          console.error(error);
+          setStatus(error.message);
+        }
+      }
+    } else if (event.key.toLowerCase() === 'f' && document.fullscreenEnabled) {
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else await document.documentElement.requestFullscreen();
+      } catch (error) {
+        console.error(error);
+        flash('fullscreen unavailable');
+      }
+    } else if (event.key === '`') {
+      showStats = !showStats;
+      app.setResourceTelemetry?.(showStats);
+      updateStats(app.stats, app, { forceTelemetry: true });
+    }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (app && document.visibilityState === 'visible') lockScreen();
+  });
+  addEventListener('resize', () => { paintLoaderProgress(true); redrawStaticFrame(); });
+  document.addEventListener('fullscreenchange', redrawStaticFrame);
+  if (query.has('t')) begin();
+  else document.documentElement.dataset.debrisState = 'launcher';
+})();
+</script>
+</body>
+</html>
