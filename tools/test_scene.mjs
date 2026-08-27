@@ -123,9 +123,9 @@ assert.ok(Math.abs(translations[0] - 0.1) < 1e-6);
 assert.ok(Math.abs(translations[1] - (0.1 + 1 / 3)) < 1e-6);
 assert.ok(Math.abs(translations[2] - (0.1 + 2 / 3)) < 1e-6);
 
-// Instanced particles are rebuilt every frame but their arrays are derivable.
-// Reuse them by particle index so a busy particle scene does not allocate one
-// position, rotation and output matrix per particle per frame.
+// Particle traversal only needs one position/rotation workspace. Instanced
+// particles additionally retain one output matrix per particle because the
+// renderer consumes all of them after traversal has completed.
 const firstInstances = env.frame.meshJobs[0].instances;
 const firstMatrices = firstInstances.slice();
 const particleMemory = env.instanceFor(particleCall.op);
@@ -142,23 +142,35 @@ assert.ok(scratchDescriptor);
 assert.equal(scratchDescriptor.enumerable, false,
   'derivable particle scratch is excluded from runtime snapshots');
 const firstScratch = scratchDescriptor.value;
-const firstPositions = firstScratch.particles.map(particle => particle.position);
-const firstRotations = firstScratch.particles.map(particle => particle.rotation);
-assert.deepEqual(firstScratch.particles.map(particle => particle.matrix), firstMatrices);
+assert.equal(Object.hasOwn(firstScratch, 'particles'), false,
+  'particle scratch has no per-particle wrapper objects');
+assert.ok(firstScratch.position instanceof Float32Array);
+assert.equal(firstScratch.position.length, 3);
+assert.equal(firstScratch.matrix, null,
+  'instanced traversal does not allocate a redundant shared output matrix');
+assert.ok(firstScratch.rotation instanceof Float32Array);
+assert.equal(firstScratch.rotation.length, 16);
+assert.equal(firstScratch.matrices.length, particleParameters[1]);
+assert.deepEqual(firstScratch.matrices, firstMatrices);
+assert.ok(firstScratch.matrices.every(matrix => matrix instanceof Float32Array));
+const firstPosition = firstScratch.position;
+const firstRotation = firstScratch.rotation;
 
 particleParameters[12] = 0.35;
 D.beginRenderFrame(env);
 particleHandler.exec(particleCall);
 const secondInstances = env.frame.meshJobs[0].instances;
+const secondScratch = particleMemory._particleScratch;
 assert.equal(secondInstances, firstInstances, 'the instances array is reused across frames');
 for (let index = 0; index < secondInstances.length; index++) {
   assert.equal(secondInstances[index], firstMatrices[index],
     `particle ${index} reuses its output matrix`);
-  assert.equal(firstScratch.particles[index].position, firstPositions[index],
-    `particle ${index} reuses its position scratch`);
-  assert.equal(firstScratch.particles[index].rotation, firstRotations[index],
-    `particle ${index} reuses its rotation scratch`);
 }
+assert.equal(secondScratch, firstScratch, 'later frames reuse the compact particle scratch');
+assert.equal(secondScratch.position, firstPosition,
+  'all instanced particles and later frames share one position workspace');
+assert.equal(secondScratch.rotation, firstRotation,
+  'all instanced particles and later frames share one rotation workspace');
 for (let index = 0; index < secondInstances.length; index++) {
   const stateOffset = index * 4;
   let fraction = particleParameters[12] + particleMemory.pos[stateOffset + 3] +
@@ -190,6 +202,49 @@ assert.deepEqual(
   'reused particle matrices remain bit-identical to a fresh calculation',
 );
 
+// Non-instanced traversal may reuse a single matrix while walking particles,
+// but each deferred mesh job must own a stable copy. The equivalent instanced
+// path is an oracle for the authored transforms because bit 0x100 only selects
+// how those transforms are submitted.
+{
+  const traversalEnvironment = environment();
+  const traversalParameters = particleParameters.slice();
+  traversalParameters[0] &= ~0x100;
+  const traversalCall = callFor(0xc5, traversalParameters, [mesh], traversalEnvironment);
+  traversalCall.op.cache = particleHandler.init(traversalCall);
+  particleHandler.exec(traversalCall);
+
+  const traversalMemory = traversalEnvironment.instanceFor(traversalCall.op);
+  const traversalScratch = traversalMemory._particleScratch;
+  const traversalJobs = traversalEnvironment.frame.meshJobs;
+  const oracleMatrices = oracleEnvironment.frame.meshJobs[0].instances;
+  assert.equal(Object.hasOwn(traversalScratch, 'particles'), false);
+  assert.ok(traversalScratch.position instanceof Float32Array);
+  assert.ok(traversalScratch.matrix instanceof Float32Array);
+  assert.ok(traversalScratch.rotation instanceof Float32Array);
+  assert.equal(traversalScratch.matrices, null,
+    'non-instanced traversal has no persistent per-particle output matrices');
+  assert.equal(traversalJobs.length, oracleMatrices.length);
+  assert.equal(new Set(traversalJobs.map(job => job.matrix)).size, traversalJobs.length,
+    'each non-instanced deferred job owns an independent matrix');
+  for (let index = 0; index < traversalJobs.length; index++) {
+    assert.notEqual(traversalJobs[index].matrix, traversalScratch.matrix,
+      `particle ${index} job does not retain the shared traversal matrix`);
+    assert.deepEqual(Array.from(traversalJobs[index].matrix), Array.from(oracleMatrices[index]),
+      `particle ${index} non-instanced transform is bit-identical to the oracle`);
+  }
+
+  const firstTraversalJobs = traversalJobs.map(job => job.matrix);
+  traversalParameters[12] = 0.47;
+  D.beginRenderFrame(traversalEnvironment);
+  particleHandler.exec(traversalCall);
+  assert.equal(traversalMemory._particleScratch, traversalScratch,
+    'non-instanced frames reuse the compact traversal scratch');
+  assert.ok(traversalEnvironment.frame.meshJobs.every((job, index) =>
+    job.matrix !== firstTraversalJobs[index]),
+  'later non-instanced jobs remain independent of earlier frame output');
+}
+
 // Runtime cloneState walks enumerable properties. Mimic snapshot/restore here:
 // the cache must be absent from the clone and reconstructed on the next frame.
 const snapshotMemory = cloneSnapshotState(particleMemory);
@@ -217,6 +272,10 @@ const restoredDescriptor = Object.getOwnPropertyDescriptor(restoredMemory, '_par
 assert.ok(restoredDescriptor, 'particle scratch is recreated after snapshot restore');
 assert.equal(restoredDescriptor.enumerable, false);
 assert.notEqual(restoredDescriptor.value, firstScratch);
+assert.equal(Object.hasOwn(restoredDescriptor.value, 'particles'), false);
+assert.ok(restoredDescriptor.value.position instanceof Float32Array);
+assert.equal(restoredDescriptor.value.matrix, null);
+assert.equal(restoredDescriptor.value.matrices.length, particleParameters[1]);
 assert.notEqual(env.frame.meshJobs[0].instances, firstInstances,
   'restored state receives a fresh derivable instances cache');
 assert.deepEqual(

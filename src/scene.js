@@ -428,10 +428,11 @@ function particleScratch(mem, mode, count) {
   let scratch = mem[PARTICLE_SCRATCH];
   if (scratch?.mode === mode && scratch.count === count) return scratch;
   const rotating = Boolean(mode & 0x10);
+  const instanced = Boolean(mode & 0x100);
   scratch = {
     mode,
     count,
-    instances: mode & 0x100 ? [] : null,
+    instances: instanced ? [] : null,
     savedSelect: new Float32Array(4),
     savedFraction: new Float32Array(4),
     splineValue: new Float32Array(4),
@@ -439,12 +440,12 @@ function particleScratch(mem, mode, count) {
     splineDirection: [0, 0, 0],
     generatedSpline: null,
     generatedSplineEval: null,
+    position: new Float32Array(3),
+    matrix: instanced ? null : new Float32Array(16),
+    matrices: instanced
+      ? Array.from({ length: count }, () => new Float32Array(16)) : null,
+    rotation: rotating ? new Float32Array(16) : null,
     composedMatrix: rotating ? new Float32Array(16) : null,
-    particles: Array.from({ length: count }, () => ({
-      position: new Float32Array(3),
-      matrix: new Float32Array(16),
-      rotation: rotating ? new Float32Array(16) : null,
-    })),
   };
   // Particle positions and output matrices are entirely derived from the
   // enumerable random state plus the current parameters. Runtime snapshots use
@@ -487,10 +488,9 @@ function execParticles(call) {
     if (fraction < 1 && (mode & 64)) continue;
     while (fraction >= 1) fraction -= 1;
 
-    const particle = scratch.particles[i];
-    const matrix = mat4Identity(particle.matrix);
+    const matrix = mat4Identity(instances ? scratch.matrices[i] : scratch.matrix);
     const g = fraction * fraction;
-    const position = particle.position;
+    const position = scratch.position;
     position[0] = mem.pos[stateOffset] + mem.speed[stateOffset] * fraction * randomSpeed + g * gravityX;
     position[1] = mem.pos[stateOffset + 1] + mem.speed[stateOffset + 1] * fraction * randomSpeed + g * gravityY;
     position[2] = mem.pos[stateOffset + 2] + mem.speed[stateOffset + 2] * fraction * randomSpeed + g * gravityZ;
@@ -549,8 +549,8 @@ function execParticles(call) {
         ry += mem.rotSpeed[rotationOffset + 1] * fraction;
         rz += mem.rotSpeed[rotationOffset + 2] * fraction;
       }
-      mat4Euler(rx, ry, rz, particle.rotation);
-      mat4MulA(particle.rotation, matrix, scratch.composedMatrix);
+      mat4Euler(rx, ry, rz, scratch.rotation);
+      mat4MulA(scratch.rotation, matrix, scratch.composedMatrix);
       matrix.set(scratch.composedMatrix);
     }
 
