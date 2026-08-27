@@ -7,6 +7,50 @@ const D = { ...MaterialAPI, handlers };
 const bitmap = id => ({ kind: 'bitmap', opId: id, width: 8, height: 8 });
 const op = { cache: null, execInputs() {} };
 
+// Animated updates retain the material-owned parameter store when its shape is
+// stable, while preserving change detection, generations and caller isolation.
+{
+  const constructorInput = [1, undefined, -0, NaN];
+  const material = new D.Material('test', constructorInput, []);
+  const ownedParameters = material.parameters;
+  assert.notEqual(ownedParameters, constructorInput);
+  assert.deepEqual(ownedParameters.slice(0, 2), [1, null]);
+  constructorInput[0] = 99;
+  assert.equal(material.parameters[0], 1,
+    'construction does not alias the caller parameter array');
+
+  const unchangedInput = [1, null, -0, NaN];
+  assert.equal(material.update(unchangedInput), false);
+  assert.equal(material.version, 0);
+  assert.equal(material.parameters, ownedParameters,
+    'an unchanged update retains the owned parameter array');
+  unchangedInput[0] = 77;
+  assert.equal(material.parameters[0], 1,
+    'an unchanged update does not begin aliasing its caller');
+
+  const changedInput = [2, undefined, 0, NaN];
+  assert.equal(material.update(changedInput), true);
+  assert.equal(material.version, 1);
+  assert.equal(material.parameters, ownedParameters,
+    'a same-length change updates the owned array in place');
+  assert.deepEqual(material.parameters.slice(0, 3), [2, null, 0]);
+  assert.ok(Object.is(material.parameters[3], NaN));
+  changedInput[0] = 88;
+  changedInput[1] = 5;
+  assert.deepEqual(material.parameters.slice(0, 2), [2, null],
+    'a changed update copies values instead of retaining caller storage');
+
+  const resizedInput = [3, undefined, 4, 5, 6];
+  assert.equal(material.update(resizedInput), true);
+  assert.equal(material.version, 2);
+  assert.notEqual(material.parameters, ownedParameters,
+    'a structural length change replaces the owned parameter array');
+  assert.deepEqual(material.parameters, [3, null, 4, 5, 6]);
+  resizedInput[0] = 66;
+  assert.equal(material.parameters[0], 3,
+    'a structural update does not alias the caller parameter array');
+}
+
 const p11 = new Array(64).fill(0);
 p11[34] = p11[35] = p11[36] = 1;
 p11[43] = p11[44] = 1;

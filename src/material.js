@@ -59,8 +59,17 @@ class Material {
         if (!Object.is(this.parameters[index], value)) { unchanged = false; break; }
       }
       if (unchanged) return false;
+      // Keep the renderer-facing array identity stable for ordinary animated
+      // updates. The call record owns a separate parameter array, so copy every
+      // value instead of retaining or aliasing that caller-owned storage.
+      for (let index = 0; index < parameters.length; index++) {
+        this.parameters[index] = parameters[index] == null ? null : parameters[index];
+      }
+    } else {
+      // Structural changes are not produced by the native material operators,
+      // but embedders may supply them. Resize by replacing the owned array.
+      this.parameters = cloneParameters(parameters);
     }
-    this.parameters = cloneParameters(parameters);
     this.version++;
     return true;
   }
