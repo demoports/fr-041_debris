@@ -3,6 +3,7 @@
 // performance can be measured independently from browser rendering.
 
 import { readFile } from 'node:fs/promises';
+import { Session } from 'node:inspector/promises';
 import { performance } from 'node:perf_hooks';
 
 import {
@@ -19,6 +20,7 @@ import {
   setMinMeshFontAdapter,
 } from '../src/minmesh.js';
 import { createOperatorHandlers } from '../src/operators.js';
+import { advanceEffectFrame } from '../src/effects.js';
 import { Runtime } from '../src/runtime.js';
 const argumentsMap = new Map();
 for (let index = 2; index < process.argv.length; index++) {
@@ -42,6 +44,16 @@ const includeInventory = argumentsMap.has('inventory');
 const stubBitmaps = argumentsMap.has('stub-bitmaps');
 const asyncMode = argumentsMap.has('async');
 const asyncBudgetMilliseconds = numberOption('async-budget-ms', 12);
+const runtimeProfile = argumentsMap.has('runtime-profile-seconds');
+const runtimeProfileSeconds = numberOption('runtime-profile-seconds', 0);
+const runtimeProfileFrames = Math.max(1, Math.floor(numberOption('runtime-profile-frames', 30)));
+const runtimeProfileWarmupFrames = Math.max(0,
+  Math.floor(numberOption('runtime-profile-warmup-frames', 3)));
+const runtimeProfileFps = Math.max(1, Math.floor(numberOption('runtime-profile-fps', 60)));
+const runtimeProfileSampleRate = Math.max(1,
+  Math.floor(numberOption('runtime-profile-sample-rate', 44100)));
+const allocationSamplingInterval = Math.max(16384,
+  Math.floor(numberOption('allocation-sampling-interval', 65536)));
 const requestedTextureOffset = Number(argumentsMap.get('texture-offset') ?? 0);
 const textureOffset = Number.isFinite(requestedTextureOffset)
   ? Math.max(-3, Math.min(0, requestedTextureOffset | 0)) : 0;
@@ -97,6 +109,157 @@ function storageInventory(runtime) {
     compactMB: Number(((value.compactBytes || 0) / 1048576).toFixed(3)),
   });
   return { mesh: withMegabytes(mesh), minmesh: withMegabytes(minmesh) };
+}
+
+function profileFrameName(callFrame = {}) {
+  const url = String(callFrame.url || '').replace(/^file:\/\//, '');
+  const location = url
+    ? `${url}:${(callFrame.lineNumber | 0) + 1}`
+    : '(native)';
+  return `${callFrame.functionName || '(anonymous)'} ${location}`;
+}
+
+function summarizeCpuProfile(profile, limit = 20) {
+  const nodes = new Map((profile?.nodes || []).map(node => [node.id, node]));
+  const totals = new Map();
+  let totalMicroseconds = 0;
+  for (let index = 0; index < (profile?.samples?.length || 0); index++) {
+    const microseconds = profile.timeDeltas?.[index] || 0;
+    const frame = nodes.get(profile.samples[index])?.callFrame || {};
+    const key = profileFrameName(frame);
+    totals.set(key, (totals.get(key) || 0) + microseconds);
+    totalMicroseconds += microseconds;
+  }
+  return {
+    sampledMilliseconds: Number((totalMicroseconds / 1000).toFixed(3)),
+    topSelf: Array.from(totals, ([frame, microseconds]) => ({
+      frame,
+      milliseconds: Number((microseconds / 1000).toFixed(3)),
+      percent: totalMicroseconds
+        ? Number((microseconds * 100 / totalMicroseconds).toFixed(2)) : 0,
+    })).sort((a, b) => b.milliseconds - a.milliseconds).slice(0, limit),
+  };
+}
+
+function summarizeAllocationProfile(profile, limit = 20) {
+  const frames = new Map();
+  const visit = node => {
+    if (!node) return;
+    frames.set(node.id, node.callFrame || {});
+    for (const child of node.children || []) visit(child);
+  };
+  visit(profile?.head);
+  const totals = new Map();
+  let totalBytes = 0;
+  for (const sample of profile?.samples || []) {
+    const bytes = sample.size || 0;
+    const key = profileFrameName(frames.get(sample.nodeId) || {});
+    totals.set(key, (totals.get(key) || 0) + bytes);
+    totalBytes += bytes;
+  }
+  return {
+    sampledBytes: totalBytes,
+    sampledMB: Number((totalBytes / 1048576).toFixed(3)),
+    topSelf: Array.from(totals, ([frame, bytes]) => ({
+      frame,
+      bytes,
+      megabytes: Number((bytes / 1048576).toFixed(3)),
+      percent: totalBytes ? Number((bytes * 100 / totalBytes).toFixed(2)) : 0,
+    })).sort((a, b) => b.bytes - a.bytes).slice(0, limit),
+  };
+}
+
+function runtimeFrameInventory(environment) {
+  const frame = environment.frame;
+  return {
+    meshJobs: frame?.meshJobs?.length || 0,
+    effectJobs: frame?.effectJobs?.length || 0,
+    lightJobs: frame?.lightJobs?.length || 0,
+    effectGeometry: frame?.effectGeometry?.length || 0,
+    postJobs: frame?.postJobs?.length || 0,
+    outputs: environment.frameOutputs?.length || 0,
+  };
+}
+
+async function profileRuntimeFrames(runtime) {
+  // The precalc callback intentionally observes init handlers. Disable it for
+  // playback so this diagnostic matches the production Runtime configuration.
+  runtime.onHandlerCall = null;
+  runtime.handlerTraceLimit = 0;
+  runtime.handlerCalls.length = 0;
+
+  const startSample = Math.floor(runtimeProfileSeconds * runtimeProfileSampleRate);
+  const sampleForFrame = index => startSample +
+    Math.floor(index * runtimeProfileSampleRate / runtimeProfileFps);
+  let lastResult = null;
+  for (let index = 0; index < runtimeProfileWarmupFrames; index++) {
+    lastResult = runtime.frameAtSample(sampleForFrame(index), runtimeProfileSampleRate);
+    advanceEffectFrame(runtime.environment);
+  }
+  globalThis.gc?.();
+
+  const before = memory();
+  const durations = new Float64Array(runtimeProfileFrames);
+  let peakRssBytes = process.memoryUsage.rss();
+  const session = new Session();
+  session.connect();
+  try {
+    await session.post('Profiler.enable');
+    await session.post('HeapProfiler.startSampling', {
+      samplingInterval: allocationSamplingInterval,
+      includeObjectsCollectedByMajorGC: true,
+      includeObjectsCollectedByMinorGC: true,
+    });
+    await session.post('Profiler.start');
+    for (let index = 0; index < runtimeProfileFrames; index++) {
+      const frameStarted = performance.now();
+      lastResult = runtime.frameAtSample(
+        sampleForFrame(runtimeProfileWarmupFrames + index),
+        runtimeProfileSampleRate,
+      );
+      advanceEffectFrame(runtime.environment);
+      durations[index] = performance.now() - frameStarted;
+      peakRssBytes = Math.max(peakRssBytes, process.memoryUsage.rss());
+    }
+    const { profile: cpu } = await session.post('Profiler.stop');
+    const { profile: allocations } = await session.post('HeapProfiler.stopSampling');
+    const after = memory();
+    globalThis.gc?.();
+    const afterGc = memory();
+    const sortedDurations = Array.from(durations).sort((a, b) => a - b);
+    const totalDuration = sortedDurations.reduce((sum, value) => sum + value, 0);
+    const percentile = fraction => sortedDurations[Math.min(
+      sortedDurations.length - 1,
+      Math.floor((sortedDurations.length - 1) * fraction),
+    )];
+    return {
+      seconds: runtimeProfileSeconds,
+      startSample,
+      frames: runtimeProfileFrames,
+      warmupFrames: runtimeProfileWarmupFrames,
+      fps: runtimeProfileFps,
+      sampleRate: runtimeProfileSampleRate,
+      timing: {
+        meanMilliseconds: Number((totalDuration / sortedDurations.length).toFixed(3)),
+        minimumMilliseconds: Number(sortedDurations[0].toFixed(3)),
+        p50Milliseconds: Number(percentile(0.5).toFixed(3)),
+        p95Milliseconds: Number(percentile(0.95).toFixed(3)),
+        maximumMilliseconds: Number(sortedDurations.at(-1).toFixed(3)),
+      },
+      memory: {
+        before,
+        after,
+        afterGc,
+        peakRssMB: Math.round(peakRssBytes / 1048576),
+      },
+      finalResult: lastResult,
+      finalFrame: runtimeFrameInventory(runtime.environment),
+      cpu: summarizeCpuProfile(cpu),
+      allocations: summarizeAllocationProfile(allocations),
+    };
+  } finally {
+    session.disconnect();
+  }
 }
 
 const kx = new Uint8Array(await readFile(new URL('../assets/debris_party.kx', import.meta.url)));
@@ -202,6 +365,7 @@ try {
   if (previousEntry && finalMilliseconds > slowest.milliseconds) {
     slowest = { milliseconds: finalMilliseconds, entry: previousEntry };
   }
+  const frameProfile = runtimeProfile ? await profileRuntimeFrames(runtime) : null;
   console.log(JSON.stringify({
     ok: true,
     operations: document.operations.length,
@@ -222,6 +386,7 @@ try {
     memory: memory(),
     ...(includeInventory ? { inventory: cacheInventory(runtime) } : {}),
     storage: storageInventory(runtime),
+    frameProfile,
     rootKind: runtime.root?.cache?.kind || runtime.root?.cache?.type || runtime.root?.cache?.outputClass || null,
     root: runtime.root?.cache?.summary?.() || runtime.root?.cache?.type || null,
   }, null, 2));
