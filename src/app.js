@@ -1790,15 +1790,23 @@ class DebrisApp {
     if (this.duration > 0) {
       targetSample = Math.min(targetSample, sampleAtSeconds(this.duration, this.sampleRate));
     }
-    const snapshot = this.snapshotBefore(targetSample);
-    if (!snapshot) throw new Error('runtime seeking requires an initial snapshot');
-    this.runtime.restore(snapshot.state);
+    let replayStartSample = this.currentSample;
+    // The live Runtime already represents currentSample. Forward seeks can
+    // continue from it directly; only a backward seek (or a diagnostic exact
+    // reset) needs a checkpoint restore. This keeps repeated +5 second seeks
+    // linear instead of replaying the entire gap from the same older snapshot.
+    if (options.forceRestore || targetSample < replayStartSample) {
+      const snapshot = this.snapshotBefore(targetSample);
+      if (!snapshot) throw new Error('runtime seeking requires an initial snapshot');
+      this.runtime.restore(snapshot.state);
+      replayStartSample = snapshot.sample;
+    }
     this.runtime.environment.aspect = PRODUCTION_ASPECT;
     let iterations = 0;
     // Stateful effects such as ChainLine interpolate moving endpoints once per
     // visual frame, so replay at the reference capture's deterministic 30 fps
     // cadence. The sequence also yields a non-frame-aligned target remainder.
-    for (const sample of replaySampleSequence(snapshot.sample, targetSample, this.sampleRate)) {
+    for (const sample of replaySampleSequence(replayStartSample, targetSample, this.sampleRate)) {
       assertSeekActive();
       this.runtime.frameAtSample(sample, this.sampleRate);
       this.dependencies.advanceEffectFrame?.(this.runtime.environment);

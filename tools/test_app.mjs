@@ -84,6 +84,9 @@ assert.match(indexSource, /if \(_sourceApp !== app\) return;/,
   'telemetry from a disposed launcher instance cannot overwrite its successor');
 assert.match(indexSource, /fullscreen unavailable/,
   'rejected fullscreen requests are handled inside the async event listener');
+assert.match(indexSource,
+  /event\.key === 'ArrowLeft'[\s\S]*?event\.preventDefault\(\);\s*if \(event\.repeat\) return;/,
+  'held arrow keys cannot enqueue repeated relative seeks');
 const qualityInventory = await productionTextureQualityInventory();
 assert.deepEqual(Object.fromEntries(Object.entries(qualityInventory).map(([quality, result]) => [
   quality,
@@ -175,6 +178,9 @@ assert.match(browserSmokeSource, /DEBRIS_SMOKE_DXT5/);
 assert.match(browserSmokeSource,
   /\(\?:google chrome\|chromium\|chrome-headless-shell\)\/i/,
   'the guarded runner detects packaged and Playwright headless Chromium trees');
+assert.match(browserSmokeSource,
+  /seekRuntime\(sample, \{ yield: false, forceRestore: true \}\)/,
+  'profile repetitions explicitly restore their retained baseline state');
 assert.equal(D.documentDuration({ songLength: 65536 * 196, songBPM: 196 }, 44100), 60);
 assert.equal(D.documentDuration({ songLength: 1, songBPM: 1 }, 10, { calcSongSamples: () => 125 }), 12.5);
 assert.equal(D.documentDuration({ songLength: 1, songBPM: 0 }), 0);
@@ -1234,10 +1240,11 @@ assert.equal(stoppedAsEnded, true);
 // boundaries, followed by the non-frame-aligned target sample.
 const replaySamples = [];
 const replayAspects = [];
+let replayRestores = 0;
 D.advanceEffectFrame = environment => replaySamples.push(environment.sample);
 const replayRuntime = {
   environment: {},
-  restore() { this.environment.sample = 0; },
+  restore(state) { replayRestores++; this.environment.sample = state.sample || 0; },
   frameAtSample(sample) {
     replayAspects.push(this.environment.aspect);
     this.environment.sample = sample;
@@ -1247,13 +1254,41 @@ const replayApp = new D.DebrisApp({ clientWidth: 16, clientHeight: 9 }, null,
   { dependencies: D });
 replayApp.runtime = replayRuntime;
 replayApp.sampleRate = 1000;
-replayApp.snapshots = [{ second: 0, sample: 0, state: {} }];
+replayApp.snapshots = [{ second: 0, sample: 0, state: { sample: 0 } }];
 await replayApp.seekRuntime(350, { yield: false });
 assert.deepEqual(replaySamples, [33, 66, 100, 133, 166, 200, 233, 266, 300, 333, 350]);
 assert.deepEqual(replayAspects, new Array(11).fill(2),
   'draw-free seek replay retains the authored 2:1 camera');
+assert.equal(replayRestores, 0, 'a forward seek continues from the live runtime state');
+replaySamples.length = 0;
+replayAspects.length = 0;
+await replayApp.seekRuntime(500, { yield: false });
+assert.deepEqual(replaySamples, [366, 400, 433, 466, 500],
+  'a subsequent forward seek replays only the new timeline interval');
+assert.deepEqual(replayAspects, new Array(5).fill(2));
+assert.equal(replayRestores, 0);
+replaySamples.length = 0;
+replayRuntime.environment.aspect = 16 / 9;
+await replayApp.seekRuntime(500, { yield: false });
+assert.deepEqual(replaySamples, [], 'a seek to the live sample performs no replay work');
+assert.equal(replayRuntime.environment.aspect, 2,
+  'a no-op seek still restores the authored aspect');
+replayApp.snapshots.push(
+  { second: 0.3, sample: 300, state: { sample: 300 } },
+  { second: 0.5, sample: 500, state: { sample: 500 } },
+);
+await replayApp.seekRuntime(500, { yield: false, forceRestore: true });
+assert.equal(replayRestores, 1,
+  'diagnostic repetitions can explicitly restore an exact retained state');
+await replayApp.seekRuntime(450, { yield: false });
+assert.deepEqual(replaySamples, [333, 366, 400, 433, 450],
+  'a backward seek replays from its nearest retained snapshot');
+assert.equal(replayRestores, 2);
+replaySamples.length = 0;
 replayRuntime.environment.aspect = 16 / 9;
 await replayApp.seekRuntime(0, { yield: false });
+assert.equal(replayRestores, 3, 'a backward seek still restores a retained snapshot');
+assert.deepEqual(replaySamples, []);
 assert.equal(replayRuntime.environment.aspect, 2,
   'an exact-snapshot seek restores the authored aspect without replay steps');
 

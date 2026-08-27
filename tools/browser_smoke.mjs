@@ -1277,7 +1277,7 @@ try {
             let snapshotMilliseconds = 0;
             for (let repetition = 0; repetition < repetitions; repetition++) {
               const resetStarted = performance.now();
-              await app.seekRuntime(sample, { yield: false });
+              await app.seekRuntime(sample, { yield: false, forceRestore: true });
               resets.push(performance.now() - resetStarted);
               // Start each observation with an empty GPU queue. The finish
               // after render then measures the work submitted by this frame,

@@ -419,6 +419,7 @@ import { DebrisApp, telemetryPublishDue } from './src/app.js';
     if (event.key === ' ') { event.preventDefault(); flash(app.pause() ? 'paused' : 'playing'); }
     else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault();
+      if (event.repeat) return;
       const delta = event.key === 'ArrowLeft' ? -5 : 5;
       try {
         const time = await app.seek(delta);
