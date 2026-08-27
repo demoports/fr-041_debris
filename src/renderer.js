@@ -2537,18 +2537,21 @@ function shadowCasterMayAffectView(light, bounds, matrices, preparedPlanes = und
   return !planes || !boundsOutsidePlanes(bounds, planes);
 }
 
-function selectActiveLights(viewport, limit = MAX_LIGHTS) {
+function selectActiveLights(viewport, limit = MAX_LIGHTS, preparedFrustumPlanes = undefined) {
   const camera = viewport?.camera?.cameraSpace;
   const cameraPosition = camera?.length >= 15 && Number.isFinite(camera[12]) &&
     Number.isFinite(camera[13]) && Number.isFinite(camera[14])
     ? [camera[12], camera[13], camera[14]] : [0, 0, 0];
-  let frustumPlanes = null;
-  if (viewport?.camera && camera?.length >= 16) {
-    try {
-      frustumPlanes = viewFrustumPlanes(cameraMatrices(viewport.camera).viewProjection);
-    } catch {
-      // Invalid embedder camera data disables this optimization rather than
-      // risking a visible-light rejection.
+  let frustumPlanes = preparedFrustumPlanes;
+  if (frustumPlanes === undefined) {
+    frustumPlanes = null;
+    if (viewport?.camera && camera?.length >= 16) {
+      try {
+        frustumPlanes = viewFrustumPlanes(cameraMatrices(viewport.camera).viewProjection);
+      } catch {
+        // Invalid embedder camera data disables this optimization rather than
+        // risking a visible-light rejection.
+      }
     }
   }
   let candidates = (viewport?.lightJobs || [])
@@ -4146,8 +4149,9 @@ class Renderer {
     if (clearMask) gl.clear(clearMask);
 
     const matrices = cameraMatrices(viewport.camera);
+    const viewPlanes = viewFrustumPlanes(matrices.viewProjection);
     const items = [];
-    const lights = selectActiveLights(viewport);
+    const lights = selectActiveLights(viewport, MAX_LIGHTS, viewPlanes);
     // InsertLightJob computes this rectangle once, then shares it between
     // SetScissor and ZFailVolume. Reusing it here avoids subtly different
     // floating-point edges between raster clipping and stencil selection.
@@ -4160,7 +4164,6 @@ class Renderer {
       : shadowViewFrustumPlanes(matrices.viewProjection, light.position));
     const shadowZFailVolumes = lights.map((light, index) =>
       shadowZFailVolumePlanes(viewport.camera, light, matrices, lightRectangles[index]));
-    const viewPlanes = viewFrustumPlanes(matrices.viewProjection);
     forEachNativeHeadInsertedJob(viewport.effectJobs, (job, index) => {
       items.push(effectRenderItem(job, index));
     });

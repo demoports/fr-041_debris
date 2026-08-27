@@ -105,6 +105,13 @@ const selectedAfterViewportCull = D.selectActiveLights({
 }, 1);
 assert.deepEqual(selectedAfterViewportCull.map(light => light.opId), [900],
   'offscreen high-importance lights cannot evict a visible light from the capped list');
+const selectedWithPreparedViewportCull = D.selectActiveLights({
+  camera,
+  lightJobs: [...offscreenHighImportance, visibleLowImportance],
+}, 1, viewportPlanes);
+assert.deepEqual(selectedWithPreparedViewportCull.map(light => light.opId),
+  selectedAfterViewportCull.map(light => light.opId),
+  'reusing prepared viewport planes preserves light selection and culling');
 
 const sideCaster = D.meshJobWorldBounds(geometry, { matrix: translate(20, 0, 3) });
 assert.equal(D.shadowCasterMayAffectView({

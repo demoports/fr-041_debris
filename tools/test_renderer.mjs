@@ -1571,6 +1571,7 @@ assert.deepEqual(selectedAuthored.map(light => light.opId), [9],
 // draw receives that same array so material binding does not repeat camera,
 // frustum, filter and sort work for each paint item.
 {
+  let cameraProjectionBuilds = 0;
   const threadedLight = {
     opId: 80, kind: 'point', position: [0, 0, 4], range: 20,
     amplify: 1, color: 0xffffffff, flags: 0,
@@ -1579,7 +1580,9 @@ assert.deepEqual(selectedAuthored.map(light => light.opId), [9],
     flags: 0, clearColor: 0,
     camera: {
       cameraSpace: D.mat4Identity(), nearClip: 1, farClip: 100,
-      zoomX: 1, zoomY: 1, centerX: 0, centerY: 0,
+      zoomX: 1, zoomY: 1,
+      get centerX() { cameraProjectionBuilds++; return 0; },
+      centerY: 0,
     },
     lightJobs: [threadedLight],
     effectJobs: [{ op: { id: 81 }, effect: { pass: 0, usage: 'other' } }],
@@ -1612,6 +1615,8 @@ assert.deepEqual(selectedAuthored.map(light => light.opId), [9],
   assert.equal(received[0][1], received[1][1],
     'mesh and effect draws share the exact selected-light array');
   assert.equal(received[0][1][0], threadedLight);
+  assert.equal(cameraProjectionBuilds, 1,
+    'viewport planning builds the camera projection and its frustum only once');
 }
 
 // RenderPaintJobs removes the previous light scissor before every
