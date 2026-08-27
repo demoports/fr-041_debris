@@ -6,6 +6,7 @@ import {
   mat4Copy,
   mat4Direction,
   mat4Euler,
+  mat4EulerTurns,
   mat4Identity,
   mat4MulA,
   mat4SRT,
@@ -16,6 +17,7 @@ const KV_TIME = 0x00;
 const KV_SELECT = 0x03;
 const KV_FRACTION = 0x0b;
 const PARTICLE_SCRATCH = '_particleScratch';
+const SCENE_TRANSFORM_SCRATCH = Symbol('sceneTransformScratch');
 
 class Scene {
   constructor() {
@@ -60,18 +62,77 @@ function makeScene(value) {
   return scene;
 }
 
-function srtFrom(parameters, offset = 0) {
-  return new Float32Array([
-    parameters[offset] ?? 1,
-    parameters[offset + 1] ?? 1,
-    parameters[offset + 2] ?? 1,
-    parameters[offset + 3] ?? 0,
-    parameters[offset + 4] ?? 0,
-    parameters[offset + 5] ?? 0,
-    parameters[offset + 6] ?? 0,
-    parameters[offset + 7] ?? 0,
-    parameters[offset + 8] ?? 0,
-  ]);
+function srtFrom(parameters, offset = 0, out = new Float32Array(9)) {
+  out[0] = parameters[offset] ?? 1;
+  out[1] = parameters[offset + 1] ?? 1;
+  out[2] = parameters[offset + 2] ?? 1;
+  out[3] = parameters[offset + 3] ?? 0;
+  out[4] = parameters[offset + 4] ?? 0;
+  out[5] = parameters[offset + 5] ?? 0;
+  out[6] = parameters[offset + 6] ?? 0;
+  out[7] = parameters[offset + 7] ?? 0;
+  out[8] = parameters[offset + 8] ?? 0;
+  return out;
+}
+
+function createSceneTransformScratch(pool) {
+  const srt = new Float32Array(9);
+  return {
+    pool,
+    srt,
+    // core.mat4SRT creates this view on every call. Scene traversal keeps one
+    // per reentrancy depth and otherwise follows the same arithmetic below.
+    rotation: srt.subarray(3, 6),
+    matrix: new Float32Array(16),
+    next: null,
+    savedSelect: null,
+  };
+}
+
+function acquireSceneTransformScratch(op) {
+  let pool = op[SCENE_TRANSFORM_SCRATCH];
+  if (!pool) {
+    pool = { depth: 0, entries: [] };
+    Object.defineProperty(op, SCENE_TRANSFORM_SCRATCH, {
+      configurable: true,
+      value: pool,
+    });
+  }
+  const depth = pool.depth++;
+  return pool.entries[depth] ||= createSceneTransformScratch(pool);
+}
+
+function releaseSceneTransformScratch(scratch) {
+  scratch.pool.depth--;
+}
+
+function sceneSRTMatrix(scratch) {
+  const srt = scratch.srt;
+  const out = scratch.matrix;
+  // Exact allocation-free counterpart of core.mat4SRT. Keep every f32 boundary
+  // and multiplication in the same order so animated transforms remain bitwise
+  // identical to the legacy helper.
+  mat4EulerTurns(scratch.rotation, out);
+  const sx = srt[0], sy = srt[1], sz = srt[2];
+  out[0] = f32(out[0] * sx);
+  out[1] = f32(out[1] * sx);
+  out[2] = f32(out[2] * sx);
+  out[4] = f32(out[4] * sy);
+  out[5] = f32(out[5] * sy);
+  out[6] = f32(out[6] * sy);
+  out[8] = f32(out[8] * sz);
+  out[9] = f32(out[9] * sz);
+  out[10] = f32(out[10] * sz);
+  out[12] = f32(srt[6]);
+  out[13] = f32(srt[7]);
+  out[14] = f32(srt[8]);
+  out[15] = 1;
+  return out;
+}
+
+function sceneTransformMatrix(parameters, scratch) {
+  srtFrom(parameters, 0, scratch.srt);
+  return sceneSRTMatrix(scratch);
 }
 
 function ensureFrame(environment) {
@@ -163,9 +224,21 @@ function execSceneInputs(call, srt = null) {
   if (srt) environment.matrixStack.pop();
 }
 
+function execTransformedSceneInputs(call) {
+  const { environment, op } = call;
+  const scratch = acquireSceneTransformScratch(op);
+  try {
+    environment.matrixStack.pushMul(sceneTransformMatrix(call.parameters, scratch));
+    execSceneInputs(call);
+    environment.matrixStack.pop();
+  } finally {
+    releaseSceneTransformScratch(scratch);
+  }
+}
+
 function initScene(call) {
   const scene = makeScene(call.inputs[0]) || new Scene();
-  scene.srt.set(srtFrom(call.parameters));
+  srtFrom(call.parameters, 0, scene.srt);
   return scene;
 }
 
@@ -183,28 +256,38 @@ function initMultiply(call) {
   if (!child) return null;
   const scene = new Scene();
   scene.children.push(child);
-  scene.srt.set(srtFrom(call.parameters));
+  srtFrom(call.parameters, 0, scene.srt);
   scene.count = call.parameters[9] | 0;
   return scene;
 }
 
 function execMultiply(call) {
-  const { environment, parameters } = call;
+  const { environment, op, parameters } = call;
   const count = parameters[9] | 0;
-  const matrix = mat4SRT(srtFrom(parameters));
+  const scratch = acquireSceneTransformScratch(op);
+  const matrix = sceneTransformMatrix(parameters, scratch);
   const select = environment.vars[KV_SELECT];
-  const saved = new Float32Array(select);
-
-  environment.matrixStack.duplicate();
-  for (let i = 0; i < count; i++) {
-    select.fill(i);
-    execSceneInputs(call);
-    const next = mat4MulA(matrix, environment.matrixStack.top);
-    environment.matrixStack.pop();
-    environment.matrixStack.push(next);
+  if (!scratch.savedSelect || scratch.savedSelect.length !== select.length) {
+    scratch.savedSelect = new Float32Array(select.length);
   }
-  environment.matrixStack.pop();
-  select.set(saved);
+  const saved = scratch.savedSelect;
+  saved.set(select);
+  scratch.next ||= new Float32Array(16);
+
+  try {
+    environment.matrixStack.duplicate();
+    for (let i = 0; i < count; i++) {
+      select.fill(i);
+      execSceneInputs(call);
+      mat4MulA(matrix, environment.matrixStack.top, scratch.next);
+      environment.matrixStack.pop();
+      environment.matrixStack.push(scratch.next);
+    }
+    environment.matrixStack.pop();
+    select.set(saved);
+  } finally {
+    releaseSceneTransformScratch(scratch);
+  }
 }
 
 function initLight() {
@@ -213,32 +296,38 @@ function initLight() {
 
 function execLight(call) {
   const { environment, op, parameters: p } = call;
-  const srt = new Float32Array([
-    1, 1, 1,
-    p[0] || 0, p[1] || 0, p[2] || 0,
-    p[3] || 0, p[4] || 0, p[5] || 0,
-  ]);
-  environment.matrixStack.pushMul(mat4SRT(srt));
-  const matrix = environment.matrixStack.top;
-  const flags = p[6] >>> 0;
-  const directional = Boolean(flags & 4);
-  const direction = new Float32Array(matrix.subarray(8, 11));
-  const range = p[10] || 0;
-  const position = directional && !range
-    ? new Float32Array([direction[0] * 1e6, direction[1] * 1e6, direction[2] * 1e6])
-    : new Float32Array(matrix.subarray(12, 15));
-  ensureFrame(environment).lightJobs.push({
-    kind: directional ? 'directional' : 'point',
-    opId: op.id,
-    position,
-    direction,
-    flags,
-    color: p[8] >>> 0,
-    amplify: f32(p[9] || 0),
-    range: range ? f32(range) : 1e15,
-    event: environment.currentEvent || null,
-  });
-  environment.matrixStack.pop();
+  const scratch = acquireSceneTransformScratch(op);
+  const srt = scratch.srt;
+  srt[0] = srt[1] = srt[2] = 1;
+  srt[3] = p[0] || 0; srt[4] = p[1] || 0; srt[5] = p[2] || 0;
+  srt[6] = p[3] || 0; srt[7] = p[4] || 0; srt[8] = p[5] || 0;
+  try {
+    // The retained light fields below are independent copies; neither this
+    // reusable local transform nor the recycled stack level escapes traversal.
+    environment.matrixStack.pushMul(sceneSRTMatrix(scratch));
+    const matrix = environment.matrixStack.top;
+    const flags = p[6] >>> 0;
+    const directional = Boolean(flags & 4);
+    const direction = new Float32Array([matrix[8], matrix[9], matrix[10]]);
+    const range = p[10] || 0;
+    const position = directional && !range
+      ? new Float32Array([direction[0] * 1e6, direction[1] * 1e6, direction[2] * 1e6])
+      : new Float32Array([matrix[12], matrix[13], matrix[14]]);
+    ensureFrame(environment).lightJobs.push({
+      kind: directional ? 'directional' : 'point',
+      opId: op.id,
+      position,
+      direction,
+      flags,
+      color: p[8] >>> 0,
+      amplify: f32(p[9] || 0),
+      range: range ? f32(range) : 1e15,
+      event: environment.currentEvent || null,
+    });
+    environment.matrixStack.pop();
+  } finally {
+    releaseSceneTransformScratch(scratch);
+  }
 }
 
 function initMarker(call) {
@@ -583,10 +672,10 @@ function execParticles(call) {
 }
 
 const sceneHandlers = {
-  0x00c0: { init: initScene, exec: call => execSceneInputs(call, srtFrom(call.parameters)) },
+  0x00c0: { init: initScene, exec: execTransformedSceneInputs },
   0x00c1: { init: initAdd, exec: call => execSceneInputs(call) },
   0x00c2: { init: initMultiply, exec: execMultiply },
-  0x00c3: { init: initMultiply, exec: call => execSceneInputs(call, srtFrom(call.parameters)) },
+  0x00c3: { init: initMultiply, exec: execTransformedSceneInputs },
   0x00c4: { init: initLight, exec: execLight },
   0x00c5: { init: initParticles, exec: execParticles },
   0x00d2: { init: initLight, exec: call => call.op.execInputs(call.environment) },

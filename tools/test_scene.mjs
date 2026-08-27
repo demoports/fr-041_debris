@@ -62,6 +62,30 @@ function callFor(classId, parameters, inputs, env, op = {}) {
   return call;
 }
 
+function float32Bits(values) {
+  return Array.from(new Uint32Array(
+    values.buffer, values.byteOffset, values.byteLength / Uint32Array.BYTES_PER_ELEMENT,
+  ));
+}
+
+function legacySceneMatrix(parameters, base = D.mat4Identity()) {
+  const srt = new Float32Array([
+    parameters[0] ?? 1, parameters[1] ?? 1, parameters[2] ?? 1,
+    parameters[3] ?? 0, parameters[4] ?? 0, parameters[5] ?? 0,
+    parameters[6] ?? 0, parameters[7] ?? 0, parameters[8] ?? 0,
+  ]);
+  return D.mat4Mul(base, D.mat4SRT(srt));
+}
+
+function transformScratchPool(op) {
+  const symbol = Object.getOwnPropertySymbols(op)
+    .find(value => value.description === 'sceneTransformScratch');
+  assert.ok(symbol, 'scene transform scratch is private symbol state on its operator');
+  const descriptor = Object.getOwnPropertyDescriptor(op, symbol);
+  assert.equal(descriptor.enumerable, false);
+  return descriptor.value;
+}
+
 const env = environment();
 env.vars[0].fill(3.5);
 const mesh = { kind: 'mesh', name: 'test' };
@@ -96,6 +120,191 @@ lightHandler.exec(lightCall);
 assert.equal(env.frame.lightJobs[0].kind, 'directional');
 assert.deepEqual(Array.from(env.frame.lightJobs[0].direction), [0, 0, 1]);
 assert.deepEqual(Array.from(env.frame.lightJobs[0].position), [0, 0, 1e6]);
+
+// Scene SRT operators refill per-op, depth-indexed scratch on every execution.
+// Fresh core helpers are the numerical oracle; compare raw Float32 bits so a
+// changed rounding boundary, signed zero or animated-value reuse cannot hide.
+{
+  const transformEnvironment = environment();
+  const transformParameters = [
+    1.25, -0.75, 2.5,
+    0.125, -0.375, 0.625,
+    3.25, -4.5, 5.75, 0,
+  ];
+  const transformOp = {};
+  const transformCall = callFor(0xc0, transformParameters, [mesh],
+    transformEnvironment, transformOp);
+  transformOp.cache = sceneHandler.init(transformCall);
+  sceneHandler.exec(transformCall);
+  const firstJobMatrix = transformEnvironment.frame.meshJobs[0].matrix;
+  const firstJobBits = float32Bits(firstJobMatrix);
+  assert.deepEqual(firstJobBits, float32Bits(legacySceneMatrix(transformParameters)),
+    'Scene transform scratch is bit-identical to fresh srtFrom/mat4SRT output');
+
+  const transformPool = transformScratchPool(transformOp);
+  assert.equal(transformPool.depth, 0);
+  assert.equal(transformPool.entries.length, 1);
+  const transformScratch = transformPool.entries[0];
+  assert.notEqual(firstJobMatrix, transformScratch.matrix,
+    'a deferred mesh job does not retain the per-op transform scratch');
+
+  transformParameters[0] = -1.5;
+  transformParameters[3] = -0.2;
+  transformParameters[6] = -8.125;
+  D.beginRenderFrame(transformEnvironment);
+  sceneHandler.exec(transformCall);
+  assert.equal(transformPool.entries[0], transformScratch,
+    'repeated Scene execution reuses its transform scratch');
+  assert.deepEqual(float32Bits(transformEnvironment.frame.meshJobs[0].matrix),
+    float32Bits(legacySceneMatrix(transformParameters)),
+    'animated Scene parameters are recomputed on every execution');
+  assert.deepEqual(float32Bits(firstJobMatrix), firstJobBits,
+    'later scratch reuse cannot mutate an already retained frame job');
+
+  const transform3Handler = D.handlers.get(0xc3);
+  const transform3Parameters = [
+    0.5, 1.5, 2, -0.125, 0.25, -0.5, 11, 12, 13, 4,
+  ];
+  const transform3Op = {};
+  const transform3Call = callFor(0xc3, transform3Parameters, [mesh],
+    transformEnvironment, transform3Op);
+  transform3Op.cache = transform3Handler.init(transform3Call);
+  D.beginRenderFrame(transformEnvironment);
+  transform3Handler.exec(transform3Call);
+  const transform3Pool = transformScratchPool(transform3Op);
+  assert.notEqual(transform3Pool, transformPool,
+    'separate scene operators never share mutable transform scratch');
+  assert.notEqual(transform3Pool.entries[0].matrix, transformScratch.matrix);
+  assert.deepEqual(float32Bits(transformEnvironment.frame.meshJobs[0].matrix),
+    float32Bits(legacySceneMatrix(transform3Parameters)));
+}
+
+// Multiply reuses both its local SRT matrix and cumulative multiplication
+// output, while every submitted job remains an independent snapshot.
+{
+  const multiplyEnvironment = environment();
+  const multiplyParameters = [
+    1.25, 0.625, -0.75, 0.0625, -0.1875, 0.3125, 2.5, -1.25, 0.75, 4,
+  ];
+  const multiplyOp = {};
+  const scratchMultiplyCall = callFor(0xc2, multiplyParameters, [mesh],
+    multiplyEnvironment, multiplyOp);
+  multiplyOp.cache = multiplyHandler.init(scratchMultiplyCall);
+  multiplyHandler.exec(scratchMultiplyCall);
+
+  const multiplySRT = () => new Float32Array(multiplyParameters.slice(0, 9));
+  const expectedMultiplyJobs = () => {
+    const step = D.mat4SRT(multiplySRT());
+    const result = [];
+    let current = D.mat4Identity();
+    for (let index = 0; index < (multiplyParameters[9] | 0); index++) {
+      result.push(new Float32Array(current));
+      current = D.mat4MulA(step, current);
+    }
+    return result;
+  };
+  assert.deepEqual(
+    multiplyEnvironment.frame.meshJobs.map(job => float32Bits(job.matrix)),
+    expectedMultiplyJobs().map(float32Bits),
+    'Multiply scratch preserves every cumulative transform bit',
+  );
+  const retainedMultiplyJobs = multiplyEnvironment.frame.meshJobs.map(job => job.matrix);
+  const retainedMultiplyBits = retainedMultiplyJobs.map(float32Bits);
+  const multiplyPool = transformScratchPool(multiplyOp);
+  const multiplyScratch = multiplyPool.entries[0];
+  assert.ok(retainedMultiplyJobs.every(matrix =>
+    matrix !== multiplyScratch.matrix && matrix !== multiplyScratch.next));
+
+  multiplyParameters[3] = -0.35;
+  multiplyParameters[6] = -3.75;
+  D.beginRenderFrame(multiplyEnvironment);
+  multiplyHandler.exec(scratchMultiplyCall);
+  assert.equal(multiplyPool.entries[0], multiplyScratch,
+    'later Multiply executions reuse their per-op scratch entry');
+  assert.deepEqual(
+    multiplyEnvironment.frame.meshJobs.map(job => float32Bits(job.matrix)),
+    expectedMultiplyJobs().map(float32Bits),
+    'Multiply recomputes animated parameters on every execution',
+  );
+  assert.deepEqual(retainedMultiplyJobs.map(float32Bits), retainedMultiplyBits,
+    'Multiply scratch reuse does not alter prior deferred jobs');
+}
+
+// Multiply retains its step matrix across child traversal. A depth-indexed pool
+// keeps an inner execution of the same op from overwriting the outer step.
+{
+  const nestedEnvironment = environment();
+  const nestedParameters = [1, 1, 1, 0, 0, 0, 2, 0, 0, 2];
+  let reentered = false;
+  const seenTranslations = [];
+  let nestedCall;
+  const nestedChild = {
+    id: 801,
+    cache: { kind: 'scene' },
+    classInfo: { outputClass: 'KC_SCENE' },
+    exec(current) {
+      seenTranslations.push(current.matrixStack.top[12]);
+      if (reentered) return;
+      reentered = true;
+      const translation = nestedParameters[6], count = nestedParameters[9];
+      nestedParameters[6] = 7;
+      nestedParameters[9] = 1;
+      multiplyHandler.exec(nestedCall);
+      nestedParameters[6] = translation;
+      nestedParameters[9] = count;
+    },
+  };
+  const nestedOp = { inputs: [nestedChild] };
+  nestedCall = callFor(0xc2, nestedParameters, [nestedChild.cache],
+    nestedEnvironment, nestedOp);
+  nestedOp.cache = multiplyHandler.init(nestedCall);
+  multiplyHandler.exec(nestedCall);
+  assert.deepEqual(seenTranslations, [0, 0, 2],
+    'same-op reentrancy leaves the outer Multiply step matrix intact');
+  const nestedPool = transformScratchPool(nestedOp);
+  assert.equal(nestedPool.depth, 0);
+  assert.equal(nestedPool.entries.length, 2,
+    'one scratch entry is retained for each observed reentrancy depth');
+  assert.equal(nestedEnvironment.matrixStack.depth, 1);
+}
+
+// Light traversal can share the same local SRT machinery because retained light
+// jobs copy their direction and position rather than exposing the scratch matrix.
+{
+  const scratchLightEnvironment = environment();
+  const scratchLightParameters = [
+    0.125, -0.25, 0.375, 4, 5, 6, 0, 0, 0xff204080, 1.5, 8,
+  ];
+  const scratchLightOp = {};
+  const scratchLightCall = callFor(0xc4, scratchLightParameters, [],
+    scratchLightEnvironment, scratchLightOp);
+  lightHandler.exec(scratchLightCall);
+  const firstLight = scratchLightEnvironment.frame.lightJobs[0];
+  const firstPositionBits = float32Bits(firstLight.position);
+  const firstDirectionBits = float32Bits(firstLight.direction);
+  const lightPool = transformScratchPool(scratchLightOp);
+  const lightScratch = lightPool.entries[0];
+
+  scratchLightParameters[0] = -0.4;
+  scratchLightParameters[3] = 10;
+  D.beginRenderFrame(scratchLightEnvironment);
+  lightHandler.exec(scratchLightCall);
+  assert.equal(lightPool.entries[0], lightScratch,
+    'repeated Light execution reuses its private transform scratch');
+  const lightSRT = new Float32Array([
+    1, 1, 1,
+    scratchLightParameters[0], scratchLightParameters[1], scratchLightParameters[2],
+    scratchLightParameters[3], scratchLightParameters[4], scratchLightParameters[5],
+  ]);
+  const lightMatrix = D.mat4Mul(D.mat4Identity(), D.mat4SRT(lightSRT));
+  assert.deepEqual(float32Bits(scratchLightEnvironment.frame.lightJobs[0].direction),
+    float32Bits(new Float32Array(lightMatrix.subarray(8, 11))));
+  assert.deepEqual(float32Bits(scratchLightEnvironment.frame.lightJobs[0].position),
+    float32Bits(new Float32Array(lightMatrix.subarray(12, 15))));
+  assert.deepEqual(float32Bits(firstLight.position), firstPositionBits);
+  assert.deepEqual(float32Bits(firstLight.direction), firstDirectionBits,
+    'later Light scratch reuse leaves retained light jobs unchanged');
+}
 
 const ambientHandler = D.handlers.get(0x184);
 ambientHandler.exec(callFor(0x184, [0x00f01020], [], env));
