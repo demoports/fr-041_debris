@@ -663,6 +663,116 @@ function makeOwnershipBitmap(seed = 1, width = 8, height = 8) {
   return bitmap;
 }
 
+// Complete-overwrite operators need a distinct public result but do not need
+// to copy the source pixels into it first. Pin that property independently of
+// the exact whole-buffer oracles above by making any call to Bitmap.copy fail.
+const blankOutputCases = [
+  {
+    name: 'Color',
+    run: source => D.Bitmap_Color(source, 0, 0xff80c040),
+  },
+  {
+    name: 'Range',
+    run: source => D.Bitmap_Range(source, 3, 0xff102030, 0xffe0c080),
+  },
+  {
+    name: 'HSCB',
+    run: source => D.Bitmap_HSCB(source, 0.1, 0.8, 1.1, 0.9),
+  },
+  {
+    name: 'Mask',
+    run: source => D.Bitmap_Mask(source,
+      makeOwnershipBitmap(91), makeOwnershipBitmap(92), 0),
+  },
+  {
+    name: 'Distort',
+    run: source => D.Bitmap_Distort(makeOwnershipBitmap(93), source, 0.1, 3),
+  },
+  {
+    name: 'Normals',
+    run: source => D.Bitmap_Normals(source, 0.7, 1),
+  },
+  {
+    name: 'Bump',
+    run: source => D.Bitmap_Bump(source, null, 2, 0.5, 0.5, 1, 0, 0,
+      0xffffffff, 0xff202020, 0.5, 1, 1, 0xff000000, 1, 0),
+  },
+  {
+    name: 'Text',
+    run: source => D.Bitmap_Text({}, {}, source, 0, 0, 0.25, 0.25,
+      0xffffffff, 0, 0, 0, 1, 'x', 'test'),
+  },
+  {
+    name: 'ColorBalance',
+    run: source => D.Bitmap_ColorBalance(source, 4, -3, 2, 1, -2, 3, -1, 2, -4),
+  },
+  {
+    name: 'Unwrap',
+    run: source => D.Bitmap_Unwrap(source, 0),
+  },
+  {
+    name: 'Bulge',
+    run: source => D.Bitmap_Bulge(source, 0.5),
+  },
+];
+
+for (const [caseIndex, fixture] of blankOutputCases.entries()) {
+  const source = makeOwnershipBitmap(101 + caseIndex);
+  const sourceHash = source.summary().hash;
+  const sourceBuffer = source.data.buffer;
+  const expected = fixture.run(source.copy()).summary();
+  source.copy = () => { throw new Error(`${fixture.name} copied its source pixels`); };
+  const result = fixture.run(source);
+  assert.ok(result instanceof D.Bitmap, `${fixture.name} returns a Bitmap`);
+  assert.notEqual(result, source, `${fixture.name} direct result remains distinct`);
+  assert.notEqual(result.data.buffer, sourceBuffer, `${fixture.name} owns separate output storage`);
+  assert.deepEqual(result.summary(), expected, `${fixture.name} blank output matches its oracle`);
+  assert.equal(source.summary().hash, sourceHash, `${fixture.name} preserves source bytes`);
+  assert.equal(source.data.buffer, sourceBuffer, `${fixture.name} preserves source storage`);
+}
+
+{
+  const source = makeOwnershipBitmap(120);
+  const texture = { id: 'derived GPU texture' };
+  const deferredInput = { kind: 'ipp' };
+  source.format = source.Format = 9;
+  source.texMipCount = source.TexMipCount = 4;
+  source.texMipThreshold = source.TexMipTresh = 18;
+  source.stripped = source.Stripped = true;
+  source.texture = source.Texture = texture;
+  source.deferredRender = { input: deferredInput, widthExponent: 9, heightExponent: 8 };
+  const sourceHash = source.summary().hash;
+
+  for (const result of [source.copy(), D.Bitmap_Normals(source, 0.7, 1)]) {
+    assert.equal(result.format, source.format);
+    assert.equal(result.Format, source.Format);
+    assert.equal(result.texMipCount, source.texMipCount);
+    assert.equal(result.TexMipCount, source.TexMipCount);
+    assert.equal(result.texMipThreshold, source.texMipThreshold);
+    assert.equal(result.TexMipTresh, source.TexMipTresh);
+    assert.equal(result.stripped, source.stripped);
+    assert.equal(result.Stripped, source.Stripped);
+    assert.equal(result.texture, null, 'a CPU bitmap copy never carries a GPU texture');
+    assert.equal(result.Texture, null);
+    assert.deepEqual(result.deferredRender, source.deferredRender);
+    assert.notEqual(result.deferredRender, source.deferredRender,
+      'deferred render metadata is shallow-copied');
+    assert.equal(result.deferredRender.input, deferredInput);
+  }
+  assert.equal(source.summary().hash, sourceHash);
+  assert.equal(source.texture, texture);
+}
+
+{
+  const released = makeOwnershipBitmap(121);
+  released.releaseStorage();
+  assert.throws(() => D.Bitmap_Color(released, 0, 0xffffffff),
+    /Bitmap data length mismatch/,
+    'blank-output operators retain Bitmap.copy malformed-storage errors');
+  assert.throws(() => D.Bitmap_Normals(released, 1, 0),
+    /Bitmap data length mismatch/);
+}
+
 const unaryInPlaceCases = [
   {
     classId: 0x23, name: 'Color', parameters: [0, 0xff80c040],

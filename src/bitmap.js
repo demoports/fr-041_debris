@@ -136,6 +136,18 @@ import { Random } from './core.js';
     return hash >>> 0;
   }
 
+  function copyBitmapSettings(target, source) {
+    target.format = target.Format = source.format;
+    target.texMipCount = target.TexMipCount = source.texMipCount;
+    target.texMipThreshold = target.TexMipTresh = source.texMipThreshold;
+    target.stripped = target.Stripped = source.stripped;
+    // Derived GPU objects never belong to a CPU-side bitmap copy.
+    target.texture = target.Texture = null;
+    if (source.deferredRender) target.deferredRender = { ...source.deferredRender };
+    else delete target.deferredRender;
+    return target;
+  }
+
   class Bitmap {
     constructor(width, height, data = null) {
       if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
@@ -154,13 +166,7 @@ import { Random } from './core.js';
     }
 
     copy() {
-      const result = new Bitmap(this.width, this.height, this.data);
-      result.format = result.Format = this.format;
-      result.texMipCount = result.TexMipCount = this.texMipCount;
-      result.texMipThreshold = result.TexMipTresh = this.texMipThreshold;
-      result.stripped = result.Stripped = this.stripped;
-      if (this.deferredRender) result.deferredRender = { ...this.deferredRender };
-      return result;
+      return copyBitmapSettings(new Bitmap(this.width, this.height, this.data), this);
     }
 
     clone() { return this.copy(); }
@@ -189,6 +195,16 @@ import { Random } from './core.js';
         mipThreshold: this.texMipThreshold, hash: hashWords(this.data),
       };
     }
+  }
+
+  function blankBitmapCopy(source) {
+    const expectedLength = source.width * source.height * 4;
+    // Preserve the released/malformed-storage guard while avoiding the
+    // source-to-destination pixel copy for complete-overwrite operators.
+    if (!source.data || source.data.length !== expectedLength) {
+      throw new RangeError('Bitmap data length mismatch');
+    }
+    return copyBitmapSettings(new Bitmap(source.width, source.height), source);
   }
 
   function transferBitmapStorage(target, source) {
@@ -589,7 +605,7 @@ import { Random } from './core.js';
 
   function Bitmap_Color(input, mode, color, writable = null) {
     const source = requireBitmap(input);
-    const bitmap = writable === RUNTIME_IN_PLACE ? source : source.copy();
+    const bitmap = writable === RUNTIME_IN_PLACE ? source : blankBitmapCopy(source);
     const original = input.data;
     bitmapInner(bitmap.data, packedColor(color), (mode | 0) + BI.MULCOL, original);
     return bitmap;
@@ -597,7 +613,7 @@ import { Random } from './core.js';
 
   function Bitmap_Range(input, mode, color0, color1, writable = null) {
     const sourceBitmap = requireBitmap(input);
-    const bitmap = writable === RUNTIME_IN_PLACE ? sourceBitmap : sourceBitmap.copy();
+    const bitmap = writable === RUNTIME_IN_PLACE ? sourceBitmap : blankBitmapCopy(sourceBitmap);
     let source = input.data;
     if (mode & 1) {
       bitmapInner(bitmap.data, bitmap.data, BI.GRAY, source);
@@ -734,7 +750,7 @@ import { Random } from './core.js';
 
   function Bitmap_HSCB(input, hue, saturation, contrast, brightness, writable = null) {
     const sourceBitmap = requireBitmap(input);
-    const bitmap = writable === RUNTIME_IN_PLACE ? sourceBitmap : sourceBitmap.copy();
+    const bitmap = writable === RUNTIME_IN_PLACE ? sourceBitmap : blankBitmapCopy(sourceBitmap);
     const table = new Int32Array(1026);
     hue = f32(hue); saturation = f32(saturation);
     contrast = f32(contrast); brightness = f32(brightness);
@@ -939,7 +955,7 @@ import { Random } from './core.js';
 
   function Bitmap_Mask(maskInput, bitmapB, bitmapC, mode, writable = null) {
     const mask = requireBitmap(maskInput);
-    const bitmap = writable === RUNTIME_IN_PLACE ? mask : mask.copy();
+    const bitmap = writable === RUNTIME_IN_PLACE ? mask : blankBitmapCopy(mask);
     const b = requireBitmap(bitmapB), c = requireBitmap(bitmapC);
     if (bitmap.size !== b.size || bitmap.size !== c.size) return null;
     bitmapInner(bitmap.data, bitmap.data, BI.GRAY, mask.data);
@@ -1096,7 +1112,7 @@ import { Random } from './core.js';
   function Bitmap_Distort(sampleInput, displacementInput, distance, border, writable = null) {
     const sample = requireBitmap(sampleInput), displacement = requireBitmap(displacementInput);
     if (sample.size !== displacement.size) return null;
-    const bitmap = writable === RUNTIME_IN_PLACE ? displacement : displacement.copy();
+    const bitmap = writable === RUNTIME_IN_PLACE ? displacement : blankBitmapCopy(displacement);
     // Native validates only Size and sets BilinearSetup's dimensions from the
     // writable displacement input. Equal-area, differently shaped sample
     // buffers are therefore deliberately reinterpreted with that shape.
@@ -1114,7 +1130,7 @@ import { Random } from './core.js';
   }
 
   function Bitmap_Normals(input, distance, mode) {
-    const source = requireBitmap(input), bitmap = source.copy();
+    const source = requireBitmap(input), bitmap = blankBitmapCopy(source);
     const xs = source.width, ys = source.height;
     const dist = roundEven(f32(f32(distance) * 65536));
     const shiftX = powerOfTwo(xs), shiftY = powerOfTwo(ys);
@@ -1168,7 +1184,7 @@ import { Random } from './core.js';
     if (!outer) return null;
     const source = requireBitmap(input), normals = normalsInput ? requireBitmap(normalsInput) : null;
     if (normals && (normals.width !== source.width || normals.height !== source.height)) return null;
-    const bitmap = writable === RUNTIME_IN_PLACE ? source : source.copy();
+    const bitmap = writable === RUNTIME_IN_PLACE ? source : blankBitmapCopy(source);
     const xs = source.width, ys = source.height;
     const diffuse = packedColor(diffuseColor), ambient = packedColor(ambientColor), specular = packedColor(specularColor);
     px = f32(f32(f32(f32(px) * xs) * 2) - trunc(xs / 2));
@@ -1649,7 +1665,7 @@ import { Random } from './core.js';
 
   function bitmapColorBalance(input, values, writable) {
     const source = requireBitmap(input);
-    const bitmap = writable === RUNTIME_IN_PLACE ? source : source.copy();
+    const bitmap = writable === RUNTIME_IN_PLACE ? source : blankBitmapCopy(source);
     const tables = [new Int32Array(257), new Int32Array(257), new Int32Array(257)];
     const scale = f32(100 / 255);
     for (let channel = 0; channel < 3; channel++) {
@@ -1680,7 +1696,7 @@ import { Random } from './core.js';
   }
 
   function Bitmap_Unwrap(input, mode) {
-    const source = requireBitmap(input), bitmap = source.copy();
+    const source = requireBitmap(input), bitmap = blankBitmapCopy(source);
     const context = new BilinearContext(source, (mode >> 4) & 3);
     const xScale = source.width * 0x10000, yScale = source.height * 0x10000;
     for (let y = 0; y < source.height; y++) {
@@ -1703,7 +1719,7 @@ import { Random } from './core.js';
   }
 
   function Bitmap_Bulge(input, warp) {
-    const source = requireBitmap(input), bitmap = source.copy(), context = new BilinearContext(source, 0);
+    const source = requireBitmap(input), bitmap = blankBitmapCopy(source), context = new BilinearContext(source, 0);
     const xScale = source.width * 0x10000, yScale = source.height * 0x10000;
     const invX = f32(1 / source.width), invY = f32(1 / source.height);
     warp = f32(warp);
@@ -1898,7 +1914,7 @@ import { Random } from './core.js';
   function Bitmap_Text(op, environment, input, x, y, width, height, color, flags,
     externalSpace, internalSpace, lineSkip, text, font, writable = null) {
     const source = requireBitmap(input);
-    const bitmap = writable === RUNTIME_IN_PLACE ? source : source.copy();
+    const bitmap = writable === RUNTIME_IN_PLACE ? source : blankBitmapCopy(source);
     const col = packedColor(color);
     const blob = op?.blob;
     const page = (flags & 0x70) >> 4;
