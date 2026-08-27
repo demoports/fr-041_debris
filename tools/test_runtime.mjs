@@ -154,6 +154,144 @@ const genericHandlers = new Map([[900, {
   assert.deepEqual(traced.handlerCalls.map(entry => entry.sequence), [3, 4, 5]);
 }
 
+// The canonical static animation is a one-byte END program. Its fast path
+// must still refresh the typed DataAnim projection in the existing parameter
+// array. Keep the general decoder semantics covered by an equivalent
+// NOP+END program and malformed bytecode alongside it.
+{
+  const classId = 925;
+  const classes = [{ id: classId, convention: 5, packing: 'fisc-' }];
+  const registry = { [classId]: { id: classId, convention: 5, outputClass: 'KC_ANY' } };
+  const expected = [1.25, -7, -3, 0xfedcba98, 0x89abcdef];
+  const document = () => makeDocument(classes, [{
+    classIndex: 0,
+    parameters: expected,
+    animation: [0x01],
+  }]);
+
+  const runtime = new D.Runtime(document(), {
+    registry,
+    handlers: new Map([[classId, { init: () => ({}) }]]),
+  });
+  const op = runtime.operations[0];
+  const parameters = op.animParameters;
+  op.animFloats[0] = 2.5;
+  op.animInts[1] = -17;
+  op.animInts[2] = -9;
+  op.animBits[3] = 0xdeadbeef;
+  op.animBits[4] = 0x87654321;
+  parameters.fill(null);
+  assert.equal(runtime.environment.executeAnimation(op), 0);
+  assert.equal(op.animParameters, parameters);
+  assert.deepEqual(parameters, [2.5, -17, -9, 0xdeadbeef, 0x87654321]);
+
+  op.animFloats[0] = -0.5;
+  parameters.fill(null);
+  assert.equal(runtime.environment.executeAnimation(op, new Uint8Array([0x00, 0x01])), 0);
+  assert.equal(op.animParameters, parameters);
+  assert.deepEqual(parameters, [-0.5, -17, -9, 0xdeadbeef, 0x87654321]);
+  assert.throws(() => runtime.environment.executeAnimation(op, new Uint8Array()),
+    /truncated animation/);
+  assert.throws(() => runtime.environment.executeAnimation(op, new Uint8Array([0x18])),
+    /truncated animation/);
+
+  for (const asynchronous of [false, true]) {
+    const observed = [];
+    const candidate = new D.Runtime(document(), {
+      registry,
+      handlers: new Map([[classId, {
+        init: call => { observed.push(call.parameters); return {}; },
+      }]]),
+    });
+    const stableParameters = candidate.operations[0].animParameters;
+    stableParameters.fill(null);
+    if (asynchronous) await candidate.precalcAsync(0, { budgetMilliseconds: 1000 });
+    else candidate.precalc();
+    assert.equal(candidate.operations[0].animParameters, stableParameters,
+      `${asynchronous ? 'async' : 'sync'} precalc keeps the parameter array`);
+    assert.deepEqual(stableParameters, expected,
+      `${asynchronous ? 'async' : 'sync'} precalc refreshes mixed packing`);
+    assert.deepEqual(observed, [expected],
+      `${asynchronous ? 'async' : 'sync'} handler sees refreshed parameters`);
+  }
+}
+
+// Handler-call entries are ephemeral unless tracing retains them. Hooks still
+// receive one, sequence numbers advance for every phase, and a retained trace
+// exposes the exact same object that the hook observed.
+{
+  const classId = 926;
+  const document = makeDocument(
+    [{ id: classId, convention: 0, packing: '' }],
+    [{ classIndex: 0 }],
+  );
+  const registry = { [classId]: { id: classId, convention: 0, outputClass: 'KC_ANY' } };
+  const order = [];
+  const hookEntries = [];
+  const init = () => { order.push('init-handler'); return {}; };
+  const exec = () => { order.push('exec-handler'); };
+  const hooked = new D.Runtime(document, {
+    registry,
+    handlers: new Map([[classId, { init, exec }]]),
+    onHandlerCall(call, phase, callback, entry) {
+      order.push(`${phase}-hook`);
+      hookEntries.push(entry);
+      assert.equal(call.op, hooked.operations[0]);
+      assert.equal(callback, phase === 'init' ? init : exec);
+    },
+  });
+  hooked.precalc();
+  hooked.operations[0].exec();
+  assert.deepEqual(order, ['init-hook', 'init-handler', 'exec-hook', 'exec-handler']);
+  assert.deepEqual(hookEntries.map(entry => entry.sequence), [0, 1]);
+  assert.equal(hooked.handlerCallCount, 2);
+  assert.equal(hooked.handlerCalls.length, 0,
+    'a hook does not retain diagnostic entries when tracing is disabled');
+
+  const tracedHookEntries = [];
+  const traced = new D.Runtime(document, {
+    registry,
+    handlers: new Map([[classId, { init, exec }]]),
+    handlerTraceLimit: 2,
+    onHandlerCall(call, phase, callback, entry) { tracedHookEntries.push(entry); },
+  });
+  traced.precalc();
+  traced.operations[0].exec();
+  assert.equal(traced.handlerCallCount, 2);
+  assert.equal(traced.handlerCalls.length, 2);
+  assert.equal(tracedHookEntries[0], traced.handlerCalls[0]);
+  assert.equal(tracedHookEntries[1], traced.handlerCalls[1]);
+
+  const missingOrder = [];
+  const missingEntries = [];
+  let missing;
+  missing = new D.Runtime(document, {
+    registry,
+    handlers: new Map(),
+    handlerTraceLimit: 1,
+    onHandlerCall(call, phase, callback, entry) {
+      missingOrder.push('hook');
+      missingEntries.push(entry);
+      assert.equal(call.op, missing.operations[0]);
+      assert.equal(phase, 'init');
+      assert.equal(callback, null);
+      assert.equal(entry, missing.handlerCalls[0]);
+    },
+  });
+  let missingError = null;
+  try {
+    missing.precalc();
+  } catch (error) {
+    missingOrder.push('throw');
+    missingError = error;
+  }
+  assert.match(missingError?.message || '', /missing init handler/);
+  assert.deepEqual(missingOrder, ['hook', 'throw']);
+  assert.equal(missing.handlerCallCount, 1);
+  assert.equal(missingEntries[0].sequence, 0);
+  assert.equal(missing.operations[0]._calcState, 0);
+}
+
 // Byte stores address the four lanes inside one 32-bit word.
 {
   const document = makeDocument(

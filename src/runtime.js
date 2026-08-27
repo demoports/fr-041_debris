@@ -1344,6 +1344,13 @@ class Environment {
 
   executeAnimation(op, bytecode = op.animation) {
     const bytes = asBytes(bytecode);
+    // Nearly every authored operator is static. Preserve the mandatory
+    // DataAnim-to-handler packing without constructing a decoder for the
+    // canonical one-byte program.
+    if (bytes.byteLength === 1 && bytes[0] === KA.END) {
+      op.syncAnimParameters();
+      return 0;
+    }
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const stack = [];
     let cursor = 0, popCount = 0, changed = false;
