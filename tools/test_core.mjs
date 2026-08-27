@@ -47,4 +47,73 @@ assert.deepEqual(Array.from(stack.top), Array.from(srt));
 stack.pop();
 assert.deepEqual(Array.from(stack.top), Array.from(identity));
 
+// Recycling remains opt-in because public callers may retain a pushed matrix
+// after popping it. The default stack must never overwrite that reference.
+{
+  const defaultStack = new MatrixStack();
+  const retained = defaultStack.push(srt);
+  const retainedBits = new Uint32Array(retained.buffer, retained.byteOffset, 16).slice();
+  defaultStack.pop();
+  const replacement = defaultStack.pushIdentity();
+  assert.notEqual(replacement, retained);
+  assert.deepEqual(
+    new Uint32Array(retained.buffer, retained.byteOffset, 16),
+    retainedBits,
+  );
+}
+
+// An opted-in stack keeps at most one reusable matrix per reached depth. All
+// active levels remain distinct, and every operation retains its exact float
+// bits when a recycled destination is used.
+{
+  const initial = mat4SRT(new Float32Array([
+    1.25, -2.5, 0.75, 0.125, -0.25, 0.375, 4, -5, 6,
+  ]));
+  const operand = mat4SRT(new Float32Array([
+    -0.5, 3, 1.5, -0.2, 0.3, -0.4, -7, 8, -9,
+  ]));
+  const expected = new MatrixStack(initial);
+  const recycled = new MatrixStack(initial, { recycle: true });
+  const bits = matrix => new Uint32Array(
+    matrix.buffer, matrix.byteOffset, matrix.length,
+  );
+  const runSequence = () => {
+    const expectedLevels = [
+      expected.push(operand),
+      expected.pushIdentity(),
+      expected.pushMul(operand),
+    ];
+    const recycledLevels = [
+      recycled.push(operand),
+      recycled.pushIdentity(),
+      recycled.pushMul(operand),
+    ];
+    for (let index = 0; index < expectedLevels.length; index++) {
+      assert.deepEqual(bits(recycledLevels[index]), bits(expectedLevels[index]));
+    }
+    assert.equal(new Set(recycled.stack).size, recycled.depth,
+      'no recycled matrix aliases another active stack level');
+    return recycledLevels;
+  };
+
+  const firstLevels = runSequence();
+  expected.reset();
+  recycled.reset();
+  assert.equal(recycled.depth, 1);
+  const resetLevels = runSequence();
+  for (let index = 0; index < firstLevels.length; index++) {
+    assert.equal(resetLevels[index], firstLevels[index],
+      'reset releases every inactive level for reuse at its previous depth');
+  }
+
+  expected.popAll();
+  recycled.popAll();
+  assert.deepEqual(bits(recycled.top), bits(mat4Identity()));
+  const popAllLevels = runSequence();
+  for (let index = 0; index < firstLevels.length; index++) {
+    assert.equal(popAllLevels[index], firstLevels[index],
+      'popAll releases every inactive level while restoring the root identity');
+  }
+}
+
 console.log('core numeric and matrix tests passed');

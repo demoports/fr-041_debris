@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { CLASS_REGISTRY } from '../src/classes.js';
 import { parseKX } from '../src/kx.js';
 import * as RuntimeAPI from '../src/runtime.js';
+import { sceneHandlers } from '../src/scene.js';
 
 const handlers = new Map(Object.entries(RuntimeAPI.runtimeHandlers)
   .map(([id, handler]) => [Number(id), handler]));
@@ -698,6 +699,44 @@ const genericHandlers = new Map([[900, {
   stack.push(matrix);
   assert.equal(stack.top[12], 3);
   stack.pop();
+}
+
+// Runtime traversal opts into recycling. Scene jobs own a matrix snapshot, so
+// reusing the popped traversal level on a later scene call cannot alter a job
+// that has already been deferred to the renderer.
+{
+  const environment = new D.Environment({});
+  const recycledLevel = environment.matrixStack.pushIdentity();
+  environment.matrixStack.pop();
+  const mesh = { kind: 'mesh' };
+  const meshOp = {
+    id: 1,
+    cache: mesh,
+    classInfo: { outputClass: 'KC_MESH' },
+  };
+  const sceneOp = { id: 2, inputs: [meshOp], cache: null };
+  const call = translation => ({
+    runtime: null,
+    environment,
+    op: sceneOp,
+    inputs: [mesh],
+    links: [],
+    parameters: [1, 1, 1, 0, 0, 0, translation, 0, 0],
+    strings: [],
+    splines: [],
+  });
+
+  sceneHandlers[0x00c0].exec(call(3));
+  const firstJobMatrix = environment.frame.meshJobs[0].matrix;
+  assert.equal(recycledLevel[12], 3);
+  assert.notEqual(firstJobMatrix, recycledLevel);
+  sceneHandlers[0x00c0].exec(call(7));
+  assert.equal(recycledLevel[12], 7,
+    'the runtime stack reuses its popped traversal level');
+  assert.equal(firstJobMatrix[12], 3,
+    'a deferred scene job retains its copied matrix');
+  assert.equal(environment.frame.meshJobs[1].matrix[12], 7);
+  assert.equal(environment.matrixStack.depth, 1);
 }
 
 // The yielding evaluator preserves the synchronous DFS handler order and

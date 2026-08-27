@@ -1209,7 +1209,7 @@ class Environment {
     this._instanceChain = this.defaultInstances;
     this._instanceCursor = 0;
     this.clearInstanceMemory = false;
-    this.matrixStack = new MatrixStack();
+    this.matrixStack = new MatrixStack(undefined, { recycle: true });
     this.execStack = this.matrixStack;
     this.beatTime = 0;
     this.currentTime = 0;

@@ -225,8 +225,13 @@
   }
 
   class MatrixStack {
-    constructor(initial) {
+    constructor(initial, options = {}) {
       this.stack = [initial ? mat4Copy(initial) : mat4Identity()];
+      // Public MatrixStack users may retain a matrix returned by push() after
+      // popping it, so recycling is deliberately opt-in. Runtime traversal
+      // snapshots deferred-job matrices before popping and can safely reuse
+      // these short-lived stack levels.
+      this._recycled = options?.recycle === true ? [] : null;
     }
 
     get top() {
@@ -237,19 +242,33 @@
       return this.stack.length;
     }
 
+    _acquire() {
+      return this._recycled?.pop() || new Float32Array(16);
+    }
+
+    _release(matrix) {
+      if (this._recycled) this._recycled.push(matrix);
+    }
+
     push(matrix) {
-      this.stack.push(mat4Copy(matrix));
+      const next = this._acquire();
+      mat4Copy(matrix, next);
+      this.stack.push(next);
       return this.top;
     }
 
     pushIdentity() {
-      this.stack.push(mat4Identity());
+      const next = this._acquire();
+      mat4Identity(next);
+      this.stack.push(next);
       return this.top;
     }
 
     pushMul(matrix) {
       // sMatrixStack::PushMul: MulA(matrix, top) == top * matrix.
-      this.stack.push(mat4Mul(this.top, matrix));
+      const next = this._acquire();
+      mat4Mul(this.top, matrix, next);
+      this.stack.push(next);
       return this.top;
     }
 
@@ -258,12 +277,16 @@
     }
 
     pop() {
-      if (this.stack.length > 1) this.stack.pop();
+      if (this.stack.length > 1) this._release(this.stack.pop());
       return this.top;
     }
 
     reset() {
-      this.stack.length = 1;
+      if (this._recycled) {
+        while (this.stack.length > 1) this._release(this.stack.pop());
+      } else {
+        this.stack.length = 1;
+      }
       return this.top;
     }
 
