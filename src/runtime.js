@@ -1662,10 +1662,11 @@ class Runtime {
     else if (handler) callback = handler[phase] || null;
     if (!callback && phase === 'exec' && op.classInfo?.exec === 'Exec_Misc_Nop') callback = execMiscNop;
     const call = this.makeCallRecord(op, environment);
-    const entry = {
-      sequence: this.handlerCallCount++, phase, opId: op.id, classId: op.classId,
+    const sequence = this.handlerCallCount++;
+    const entry = this.handlerTraceLimit > 0 || this.onHandlerCall ? {
+      sequence, phase, opId: op.id, classId: op.classId,
       handler: callback?.handlerName || callback?.name || null,
-    };
+    } : null;
     if (this.handlerTraceLimit > 0) {
       this.handlerCalls.push(entry);
       if (this.handlerCalls.length > this.handlerTraceLimit) this.handlerCalls.shift();
