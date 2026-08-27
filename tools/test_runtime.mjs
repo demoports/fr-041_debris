@@ -292,6 +292,179 @@ const genericHandlers = new Map([[900, {
   assert.equal(missing.operations[0]._calcState, 0);
 }
 
+// Production handlers may opt into one mutable call record per operator. The
+// record and each of its arrays stay stable, but their contents must reflect
+// the current animation, input/link caches and authored metadata on every call.
+// A nested operator owns a separate record, so its execution cannot overwrite
+// the parent's call while that parent handler is still using it.
+{
+  const leafId = 927, parentId = 928;
+  const parentConvention = 1 | (1 << 8) | (1 << 12) |
+    (1 << 16) | (1 << 20) | D.OPC_VARIABLEINPUT;
+  const document = makeDocument(
+    [
+      { id: leafId, convention: 0, packing: '' },
+      { id: parentId, convention: parentConvention, packing: 'f' },
+    ],
+    [
+      { classIndex: 0 },
+      { classIndex: 0 },
+      {
+        classIndex: 1,
+        inputs: [0, 1], links: [1], parameters: [1.25],
+        strings: ['first'],
+      },
+    ],
+  );
+  const registry = {
+    [leafId]: { id: leafId, convention: 0, outputClass: 'KC_ANY' },
+    [parentId]: { id: parentId, convention: parentConvention, outputClass: 'KC_ANY' },
+  };
+  const arrayKeys = [
+    'inputs', 'links', 'parameters', 'strings', 'splines',
+    'fixedInputs', 'variableInputs', 'callInputs',
+  ];
+  const arraySet = call => Object.fromEntries(arrayKeys.map(key => [key, call[key]]));
+  const parentCalls = [], leafCalls = [], parentArrays = [], leafArrays = [];
+  const parentSnapshots = [];
+  const handlers = new Map([
+    [leafId, { exec(call) { leafCalls.push(call); leafArrays.push(arraySet(call)); } }],
+    [parentId, {
+      exec(call) {
+        parentCalls.push(call);
+        parentArrays.push(arraySet(call));
+        parentSnapshots.push({
+          inputs: call.inputs.map(value => value?.name),
+          fixedInputs: call.fixedInputs.map(value => value?.name),
+          variableInputs: call.variableInputs.map(value => value?.name),
+          links: call.links.map(value => value?.name),
+          callInputs: call.callInputs.map(value => value?.name),
+          parameters: call.parameters.slice(),
+          strings: call.strings.slice(),
+          splines: call.splines.slice(),
+        });
+        call.op.inputs[0].exec(call.environment);
+        assert.equal(call.op.id, 2,
+          'a nested handler cannot overwrite its parent operator record');
+      },
+    }],
+  ]);
+  const runtime = new D.Runtime(document, {
+    registry, handlers, reuseHandlerCallRecords: true,
+  });
+  const [firstInput, secondInput, parent] = runtime.operations;
+  const firstCache = { name: 'input-a' };
+  const secondCache = { name: 'input-b' };
+  const firstSpline = { name: 'spline-a' };
+  firstInput.cache = firstCache;
+  secondInput.cache = secondCache;
+  parent.splines[0] = firstSpline;
+  parent.exec();
+
+  const nextFirstCache = { name: 'input-a2' };
+  const nextSecondCache = { name: 'input-b2' };
+  const secondSpline = { name: 'spline-b' };
+  firstInput.cache = nextFirstCache;
+  secondInput.cache = nextSecondCache;
+  parent.animFloats[0] = 9.5;
+  parent.strings[0] = 'second';
+  parent.splines[0] = secondSpline;
+  parent.exec();
+
+  assert.equal(parentCalls.length, 2);
+  assert.equal(leafCalls.length, 2);
+  assert.equal(parentCalls[0], parentCalls[1],
+    'one operator reuses its handler-call shell');
+  assert.equal(leafCalls[0], leafCalls[1],
+    'a nested operator independently reuses its handler-call shell');
+  assert.notEqual(parentCalls[0], leafCalls[0]);
+  for (const key of arrayKeys) {
+    assert.equal(parentArrays[0][key], parentArrays[1][key],
+      `${key} retains its array identity`);
+    assert.equal(leafArrays[0][key], leafArrays[1][key],
+      `nested ${key} retains its array identity`);
+    assert.notEqual(parentArrays[0][key], leafArrays[0][key],
+      `${key} is private to each operator`);
+  }
+  assert.equal(parentCalls[0].inputs, parentCalls[0].variableInputs,
+    'variable-input handlers retain the public alias used by existing handlers');
+  assert.deepEqual(parentSnapshots, [
+    {
+      inputs: ['input-a', 'input-b'], fixedInputs: ['input-a'],
+      variableInputs: ['input-a', 'input-b'], links: ['input-b'],
+      callInputs: ['input-a', 'input-a', 'input-b'], parameters: [1.25],
+      strings: ['first'], splines: [firstSpline],
+    },
+    {
+      inputs: ['input-a2', 'input-b2'], fixedInputs: ['input-a2'],
+      variableInputs: ['input-a2', 'input-b2'], links: ['input-b2'],
+      callInputs: ['input-a2', 'input-a2', 'input-b2'], parameters: [9.5],
+      strings: ['second'], splines: [secondSpline],
+    },
+  ]);
+
+  const publicFirst = parent.callRecord();
+  const publicSecond = parent.callRecord();
+  assert.notEqual(publicFirst, publicSecond,
+    'the public diagnostic API always returns a fresh record');
+  for (const key of [
+    'inputs', 'links', 'parameters', 'strings', 'splines',
+    'fixedInputs', 'variableInputs', 'callInputs',
+  ]) assert.notEqual(publicFirst[key], publicSecond[key], `${key} is detached publicly`);
+  publicFirst.inputs[0] = null;
+  publicFirst.links[0] = null;
+  publicFirst.parameters[0] = -1;
+  publicFirst.strings[0] = 'mutated';
+  publicFirst.splines[0] = null;
+  const publicThird = parent.callRecord();
+  assert.equal(publicThird.inputs[0], nextFirstCache);
+  assert.equal(publicThird.links[0], nextSecondCache);
+  assert.deepEqual(publicThird.parameters, [9.5]);
+  assert.deepEqual(publicThird.strings, ['second']);
+  assert.deepEqual(publicThird.splines, [secondSpline]);
+}
+
+// A diagnostic hook is allowed to retain its call argument. Even if internal
+// record reuse was requested, hooks therefore receive immutable-in-time
+// snapshots rather than a record that a later handler invocation refreshes.
+{
+  const classId = 929;
+  const convention = 1 | (1 << 16);
+  const document = makeDocument(
+    [{ id: classId, convention, packing: 'f' }],
+    [{ classIndex: 0, parameters: [2], strings: ['before'] }],
+  );
+  const registry = {
+    [classId]: { id: classId, convention, outputClass: 'KC_ANY' },
+  };
+  const calls = [];
+  const runtime = new D.Runtime(document, {
+    registry,
+    handlers: new Map([[classId, { exec() {} }]]),
+    reuseHandlerCallRecords: true,
+    onHandlerCall(call, phase) {
+      assert.equal(phase, 'exec');
+      calls.push(call);
+    },
+  });
+  const op = runtime.operations[0];
+  op.exec();
+  op.animFloats[0] = 7;
+  op.strings[0] = 'after';
+  op.exec();
+
+  assert.equal(calls.length, 2);
+  assert.notEqual(calls[0], calls[1]);
+  for (const key of [
+    'inputs', 'links', 'parameters', 'strings', 'splines',
+    'fixedInputs', 'variableInputs', 'callInputs',
+  ]) assert.notEqual(calls[0][key], calls[1][key], `${key} stays snapshot-safe for hooks`);
+  assert.deepEqual(calls[0].parameters, [2]);
+  assert.deepEqual(calls[0].strings, ['before']);
+  assert.deepEqual(calls[1].parameters, [7]);
+  assert.deepEqual(calls[1].strings, ['after']);
+}
+
 // Byte stores address the four lanes inside one 32-bit word.
 {
   const document = makeDocument(

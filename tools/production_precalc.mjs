@@ -305,6 +305,7 @@ const classCalls = {};
 const runtime = new Runtime(document, {
   strictHandlers: true,
   handlers,
+  reuseHandlerCallRecords: true,
   onHandlerCall(call, phase, callback, entry) {
     if (phase !== 'init') return;
     const now = performance.now();

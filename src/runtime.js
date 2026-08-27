@@ -1075,6 +1075,9 @@ class Op {
     this.calcError = false;
     this._calcState = 0;
     this._executing = false;
+    Object.defineProperty(this, '_handlerCallRecord', {
+      configurable: true, enumerable: false, writable: true, value: null,
+    });
 
     this._editBuffer = new ArrayBuffer(this.dataWords * 4);
     this._animBuffer = new ArrayBuffer(this.dataWords * 4);
@@ -1123,7 +1126,7 @@ class Op {
     this._executing = true;
     const popCount = environment.executeAnimation(this, this.animation);
     try {
-      return this.runtime._invokeHandler('exec', this, environment);
+      return this.runtime._invokeHandler('exec', this, environment, true);
     } finally {
       environment.pop(popCount);
       this._executing = false;
@@ -1583,6 +1586,7 @@ class Runtime {
     this.handlers = options.handlers || new Map();
     this.strictHandlers = options.strictHandlers !== false;
     this.onHandlerCall = options.onHandlerCall || null;
+    this.reuseHandlerCallRecords = options.reuseHandlerCallRecords === true;
     this.handlerTraceLimit = Math.max(0, Math.floor(Number(options.handlerTraceLimit) || 0));
     this.handlerCallCount = 0;
     this.handlerCalls = [];
@@ -1635,7 +1639,7 @@ class Runtime {
     return this.root;
   }
 
-  makeCallRecord(op, environment = this.environment) {
+  makeCallRecord(op, environment = this.environment, parametersSynced = false) {
     const fixedInputs = Array.from({ length: op.inputSlots }, (_, index) => op.inputs[index]?.cache || null);
     const variableInputs = op.convention & OPC_VARIABLEINPUT
       ? op.inputs.map(input => input?.cache || null) : [];
@@ -1646,7 +1650,7 @@ class Runtime {
       const link = op.links[index] || null;
       return op.convention & OPC_DONTCALLLINK ? link : link?.cache || null;
     });
-    op.syncAnimParameters();
+    if (!parametersSynced) op.syncAnimParameters();
     return {
       runtime: this, environment, op, inputs, links,
       parameters: op.animParameters.slice(), strings: op.strings.slice(), splines: op.splines.slice(),
@@ -1655,13 +1659,84 @@ class Runtime {
     };
   }
 
-  _invokeHandler(phase, op, environment) {
+  _reusableCallRecord(op, environment, parametersSynced = false) {
+    const variable = Boolean(op.convention & OPC_VARIABLEINPUT);
+    const inputCount = variable ? op.inputs.length : Math.max(op.inputSlots, op.inputs.length);
+    let call = op._handlerCallRecord;
+    if (!call) {
+      const fixedInputs = new Array(op.inputSlots);
+      const variableInputs = variable ? new Array(op.inputs.length) : [];
+      call = {
+        runtime: this,
+        environment,
+        op,
+        inputs: variable ? variableInputs : new Array(inputCount),
+        links: new Array(op.linkSlots),
+        parameters: new Array(op.animParameters.length),
+        strings: new Array(op.strings.length),
+        splines: new Array(op.splines.length),
+        fixedInputs,
+        variableInputs,
+        callInputs: new Array(op.inputSlots + variableInputs.length),
+      };
+      op._handlerCallRecord = call;
+    }
+
+    call.runtime = this;
+    call.environment = environment;
+    call.op = op;
+    call.fixedInputs.length = op.inputSlots;
+    for (let index = 0; index < op.inputSlots; index++) {
+      call.fixedInputs[index] = op.inputs[index]?.cache || null;
+    }
+    call.variableInputs.length = variable ? op.inputs.length : 0;
+    if (variable) {
+      call.inputs = call.variableInputs;
+      for (let index = 0; index < op.inputs.length; index++) {
+        call.variableInputs[index] = op.inputs[index]?.cache || null;
+      }
+    } else {
+      call.inputs.length = inputCount;
+      for (let index = 0; index < inputCount; index++) {
+        call.inputs[index] = op.inputs[index]?.cache || null;
+      }
+    }
+    call.links.length = op.linkSlots;
+    for (let index = 0; index < op.linkSlots; index++) {
+      const link = op.links[index] || null;
+      call.links[index] = op.convention & OPC_DONTCALLLINK ? link : link?.cache || null;
+    }
+    if (!parametersSynced) op.syncAnimParameters();
+    call.parameters.length = op.animParameters.length;
+    for (let index = 0; index < call.parameters.length; index++) {
+      call.parameters[index] = op.animParameters[index];
+    }
+    call.strings.length = op.strings.length;
+    for (let index = 0; index < call.strings.length; index++) call.strings[index] = op.strings[index];
+    call.splines.length = op.splines.length;
+    for (let index = 0; index < call.splines.length; index++) call.splines[index] = op.splines[index];
+    call.callInputs.length = call.fixedInputs.length + call.variableInputs.length;
+    let callInput = 0;
+    for (let index = 0; index < call.fixedInputs.length; index++) {
+      call.callInputs[callInput++] = call.fixedInputs[index];
+    }
+    for (let index = 0; index < call.variableInputs.length; index++) {
+      call.callInputs[callInput++] = call.variableInputs[index];
+    }
+    return call;
+  }
+
+  _invokeHandler(phase, op, environment, parametersSynced = false) {
     const handler = handlerGet(this.handlers, op.classId);
     let callback = null;
     if (typeof handler === 'function') callback = phase === 'init' ? handler : null;
     else if (handler) callback = handler[phase] || null;
     if (!callback && phase === 'exec' && op.classInfo?.exec === 'Exec_Misc_Nop') callback = execMiscNop;
-    const call = this.makeCallRecord(op, environment);
+    // Init handlers normally run once, so retaining eight arrays for every
+    // precalculated graph operator would cost memory without avoiding churn.
+    const call = phase === 'exec' && this.reuseHandlerCallRecords && !this.onHandlerCall
+      ? this._reusableCallRecord(op, environment, parametersSynced)
+      : this.makeCallRecord(op, environment, parametersSynced);
     const sequence = this.handlerCallCount++;
     const entry = this.handlerTraceLimit > 0 || this.onHandlerCall ? {
       sequence, phase, opId: op.id, classId: op.classId,
@@ -1689,7 +1764,7 @@ class Runtime {
       environment.executeAnimation(op, op.animation);
       for (const input of op.inputs) input.precalc(environment);
       if (!(op.convention & OPC_DONTCALLLINK)) for (const link of op.links) if (link) link.precalc(environment);
-      op.cache = this._invokeHandler('init', op, environment);
+      op.cache = this._invokeHandler('init', op, environment, true);
       if (op.cache && typeof op.cache === 'object' && Object.isExtensible(op.cache)) {
         if (op.cache.classId === undefined) op.cache.classId = op.outputClassId;
         if (op.cache.outputClass === undefined && op.classInfo?.outputClass) {
@@ -1787,7 +1862,7 @@ class Runtime {
           frame.stage = 2;
         }
         if (frame.stage === 2) {
-          op.cache = this._invokeHandler('init', op, environment);
+          op.cache = this._invokeHandler('init', op, environment, true);
           if (op.cache && typeof op.cache === 'object' && Object.isExtensible(op.cache)) {
             if (op.cache.classId === undefined) op.cache.classId = op.outputClassId;
             if (op.cache.outputClass === undefined && op.classInfo?.outputClass) {

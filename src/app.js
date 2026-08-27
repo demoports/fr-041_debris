@@ -1441,9 +1441,11 @@ class DebrisApp {
       }
     };
     this.resourceTelemetryEnabled ||= Boolean(rendererOptions.diagnostics);
+    const customHandlers = this.options.handlers;
     this.runtime = new this.dependencies.Runtime(this.document, {
       strictHandlers: this.options.strictHandlers !== false,
-      handlers: this.options.handlers ?? this.dependencies.createOperatorHandlers(),
+      handlers: customHandlers ?? this.dependencies.createOperatorHandlers(),
+      reuseHandlerCallRecords: this.options.reuseHandlerCallRecords ?? (customHandlers == null),
     });
     this.assertLifecycle(token);
     this.runtime.bitmapRendererHook = makeDisposableBitmapRenderer(

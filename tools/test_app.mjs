@@ -756,7 +756,8 @@ class FakeRenderer {
   }
 }
 class FakeRuntime {
-  constructor(doc) {
+  constructor(doc, options = {}) {
+    this.options = { ...options };
     this.document = doc; this.operations = []; this.roots = []; this.events = [];
     this.environment = {}; this.precalculated = false;
   }
@@ -826,6 +827,8 @@ const app = new D.DebrisApp({}, null, {
 await app.init();
 assert.equal(app.renderer.options.dxt5Mode, 'rgba8',
   'the app forwards its DXT5 diagnostic mode to the playback renderer');
+assert.equal(app.runtime.options.reuseHandlerCallRecords, true,
+  'the app opts its built-in, non-retaining handlers into call-record reuse');
 assert.equal(FakeAudioStream.instances.length, 2);
 const loaderStream = FakeAudioStream.instances[0];
 assert.equal(loaderStream.initialPlayer, undefined,
@@ -914,6 +917,19 @@ assert.equal(debugApp.loaderAudio, null);
 assert.equal(debugApp.audio, null);
 assert.equal(debugApp.debugSample, 15 * debugApp.sampleRate);
 debugApp.dispose();
+
+// Arbitrary injected handlers may retain their call arguments. The app must
+// leave record reuse disabled at that extension boundary.
+{
+  const customHandlers = new Map([[123, { exec() {} }]]);
+  const customHandlerApp = new D.DebrisApp({}, null, {
+    debugTime: 0, dependencies: D, handlers: customHandlers,
+  });
+  await customHandlerApp.init();
+  assert.equal(customHandlerApp.runtime.options.handlers, customHandlers);
+  assert.equal(customHandlerApp.runtime.options.reuseHandlerCallRecords, false);
+  customHandlerApp.dispose();
+}
 
 // A loader close failure must not replace the primary precalc exception.
 const primaryPrecalcError = new Error('primary precalc failure');
