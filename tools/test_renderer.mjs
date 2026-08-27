@@ -1881,7 +1881,8 @@ assert.deepEqual(selectedAuthored.map(light => light.opId), [9],
     0, 16, 32, 48,
   ]);
   assert.equal(pointerCalls.every(call => call.stride === 64), true);
-  assert.equal(divisorCalls.every(call => call.divisor === 1), true);
+  assert.deepEqual(divisorCalls, [],
+    'repeated draw binding keeps the instance divisors already stored in each VAO');
 
   const effectJob = { opId: 94, matrix: new Float32Array(identity) };
   const effectMatrices = renderer.instanceMatrices(effectJob);
@@ -1945,6 +1946,24 @@ assert.deepEqual(selectedAuthored.map(light => light.opId), [9],
   assert.equal(renderer.instanceBufferSize(oversizeCapacity), oversizeCapacity);
   renderer.instanceBufferCapacity = oversizeCapacity;
   assert.equal(renderer.instanceBufferSize(64), 64);
+
+  // The unbatched fallback rewrites the same instance buffer from offset zero.
+  // It still only changes the four pointers; the bound geometry VAO retains
+  // the divisors established by GeometryCache.
+  renderer.instanceUploadActive = false;
+  const fallbackJob = { opId: 97, matrix: new Float32Array(identity) };
+  const fallbackMatrices = renderer.instanceMatrices(fallbackJob);
+  const fallbackPointerStart = pointerCalls.length;
+  const fallbackBufferStart = bufferDataCalls.length;
+  renderer.bindInstanceMatrices(fallbackJob, fallbackMatrices);
+  renderer.bindInstanceMatrices(fallbackJob, fallbackMatrices);
+  assert.equal(bufferDataCalls.length, fallbackBufferStart + 2);
+  assert.equal(bufferDataCalls.at(-1), fallbackMatrices);
+  assert.deepEqual(pointerCalls.slice(fallbackPointerStart).map(call => call.offset), [
+    0, 16, 32, 48,
+    0, 16, 32, 48,
+  ]);
+  assert.deepEqual(divisorCalls, []);
 }
 
 const ippA = { type: 'viewport', id: 'a' }, ippB = { type: 'viewport', id: 'b' };
@@ -2335,7 +2354,10 @@ assert.deepEqual(inlineCalls, [
 // Animated MinMeshes may occur more than once with distinct scene times in a
 // single viewport. Each time needs a stable entry until all sorted passes draw,
 // while the bounded entry pool must recycle its VAOs/buffers next frame.
-const gpuCounts = { createVAO: 0, createBuffer: 0, deleteVAO: 0, deleteBuffer: 0, uploads: 0 };
+const gpuCounts = {
+  createVAO: 0, createBuffer: 0, deleteVAO: 0, deleteBuffer: 0, uploads: 0,
+  divisorCalls: [],
+};
 const fakeGL = {
   ARRAY_BUFFER: 1, ELEMENT_ARRAY_BUFFER: 2, STATIC_DRAW: 3, DYNAMIC_DRAW: 4,
   FLOAT: 5, UNSIGNED_BYTE: 6, UNSIGNED_SHORT: 7, UNSIGNED_INT: 8,
@@ -2343,7 +2365,8 @@ const fakeGL = {
   createBuffer() { gpuCounts.createBuffer++; return { buffer: gpuCounts.createBuffer }; },
   bindVertexArray() {}, bindBuffer() {},
   bufferData() { gpuCounts.uploads++; },
-  enableVertexAttribArray() {}, vertexAttribPointer() {}, vertexAttribDivisor() {},
+  enableVertexAttribArray() {}, vertexAttribPointer() {},
+  vertexAttribDivisor(location, divisor) { gpuCounts.divisorCalls.push({ location, divisor }); },
   deleteVertexArray() { gpuCounts.deleteVAO++; },
   deleteBuffer() { gpuCounts.deleteBuffer++; },
 };
@@ -2373,6 +2396,12 @@ assert.deepEqual(preparedTimes, [1, 2]);
 assert.deepEqual(preparedSlots, [0, 1]);
 assert.equal(gpuCounts.createVAO, 2);
 assert.equal(gpuCounts.createBuffer, 14);
+assert.deepEqual(gpuCounts.divisorCalls, [
+  { location: 5, divisor: 1 }, { location: 6, divisor: 1 },
+  { location: 7, divisor: 1 }, { location: 8, divisor: 1 },
+  { location: 5, divisor: 1 }, { location: 6, divisor: 1 },
+  { location: 7, divisor: 1 }, { location: 8, divisor: 1 },
+], 'each GeometryCache VAO configures all four instance-column divisors once');
 for (let frame = 0; frame < 8; frame++) {
   animatedCache.beginFrame();
   assert.equal(animatedCache.get(animatedMesh, frame + 10), animatedAtOne);

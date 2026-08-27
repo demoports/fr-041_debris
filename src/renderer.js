@@ -4423,7 +4423,6 @@ class Renderer {
       const location = 5 + column;
       gl.vertexAttribPointer(location, 4, gl.FLOAT, false,
         INSTANCE_MATRIX_BYTES, offset + column * 16);
-      gl.vertexAttribDivisor(location, 1);
     }
   }
 
