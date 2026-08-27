@@ -190,6 +190,22 @@ import { DebrisApp, telemetryPublishDue } from './src/app.js';
     document.documentElement.dataset.debrisRuntimeMs = String(stats.runtimeMilliseconds || 0);
     document.documentElement.dataset.debrisRenderMs = String(stats.renderMilliseconds || 0);
     document.documentElement.dataset.debrisPrecalcMs = String(stats.precalcMilliseconds || 0);
+    document.documentElement.dataset.debrisPreparationMs = String(stats.preparationMilliseconds || 0);
+    document.documentElement.dataset.debrisPrecalcYieldBackend = String(
+      stats.precalcScheduling?.backend || 'disabled',
+    );
+    document.documentElement.dataset.debrisPrecalcTaskYields = String(
+      stats.precalcScheduling?.taskYields || 0,
+    );
+    document.documentElement.dataset.debrisPrecalcPaintYields = String(
+      stats.precalcScheduling?.paintYields || 0,
+    );
+    document.documentElement.dataset.debrisPrecalcPaintTimeouts = String(
+      stats.precalcScheduling?.paintTimeouts || 0,
+    );
+    document.documentElement.dataset.debrisPrecalcYieldMs = String(
+      stats.precalcScheduling?.totalYieldMilliseconds || 0,
+    );
     document.documentElement.dataset.debrisLoaderAudioBackend = String(
       stats.loaderAudioBackend || 'disabled',
     );

@@ -29,6 +29,7 @@ const DEFAULT_DEPENDENCIES = Object.freeze({
   advanceEffectFrame,
   bitmapFromRGBA,
   createOperatorHandlers,
+  createPreparationScheduler,
   createV2Player,
   loadProductionData,
   meshStorageStats,
@@ -926,6 +927,187 @@ function nextFramePromise() {
   });
 }
 
+function createPreparationScheduler(options = {}) {
+  const hasOption = name => Object.prototype.hasOwnProperty.call(options, name);
+  const now = typeof options.now === 'function' ? options.now
+    : () => globalThis.performance?.now?.() ?? Date.now();
+  const paintIntervalMilliseconds = Math.max(1,
+    Number(options.paintIntervalMilliseconds) || 450);
+  const paintTimeoutMilliseconds = Math.max(1,
+    Number(options.paintTimeoutMilliseconds) || 100);
+  const schedulerApi = hasOption('schedulerApi') ? options.schedulerApi : globalThis.scheduler;
+  const MessageChannelCtor = hasOption('MessageChannelCtor')
+    ? options.MessageChannelCtor : globalThis.MessageChannel;
+  const requestFrame = hasOption('requestFrame') ? options.requestFrame
+    : typeof globalThis.requestAnimationFrame === 'function'
+      ? globalThis.requestAnimationFrame.bind(globalThis) : null;
+  const cancelFrame = hasOption('cancelFrame') ? options.cancelFrame
+    : typeof globalThis.cancelAnimationFrame === 'function'
+      ? globalThis.cancelAnimationFrame.bind(globalThis) : () => {};
+  const setTimer = hasOption('setTimer') ? options.setTimer
+    : globalThis.setTimeout.bind(globalThis);
+  const clearTimer = hasOption('clearTimer') ? options.clearTimer
+    : globalThis.clearTimeout.bind(globalThis);
+  const isVisible = typeof options.isVisible === 'function' ? options.isVisible
+    : () => globalThis.document?.visibilityState !== 'hidden';
+  const emptyCounts = () => ({
+    totalYields: 0,
+    taskYields: 0,
+    paintAttempts: 0,
+    paintYields: 0,
+    paintTimeouts: 0,
+    taskYieldMilliseconds: 0,
+    paintYieldMilliseconds: 0,
+  });
+  const totals = emptyCounts();
+  const phases = {};
+  const phaseCounts = phase => phases[phase] || (phases[phase] = emptyCounts());
+  const add = (phase, key, value = 1) => {
+    totals[key] += value;
+    phaseCounts(phase)[key] += value;
+  };
+  let disposed = false;
+  let channel = null;
+  const channelWaiters = [];
+  const timerWaiters = new Set();
+  const activePaints = new Set();
+  let backend;
+  let taskYield;
+
+  if (typeof options.taskYield === 'function') {
+    backend = 'injected';
+    taskYield = options.taskYield;
+  } else if (typeof schedulerApi?.yield === 'function') {
+    backend = 'scheduler';
+    taskYield = () => schedulerApi.yield.call(schedulerApi);
+  } else if (typeof MessageChannelCtor === 'function') {
+    backend = 'message-channel';
+    channel = new MessageChannelCtor();
+    channel.port1.onmessage = () => {
+      channelWaiters.shift()?.resolve();
+      if (!channelWaiters.length) {
+        channel.port1.unref?.();
+        channel.port2.unref?.();
+      }
+    };
+    channel.port1.start?.();
+    channel.port1.unref?.();
+    channel.port2.unref?.();
+    taskYield = () => new Promise((resolve, reject) => {
+      if (disposed) { resolve(); return; }
+      const waiter = { resolve, reject };
+      if (!channelWaiters.length) {
+        channel.port1.ref?.();
+        channel.port2.ref?.();
+      }
+      channelWaiters.push(waiter);
+      try { channel.port2.postMessage(0); }
+      catch (error) {
+        const index = channelWaiters.indexOf(waiter);
+        if (index >= 0) channelWaiters.splice(index, 1);
+        reject(error);
+      }
+    });
+  } else {
+    backend = 'timeout';
+    taskYield = () => new Promise(resolve => {
+      if (disposed) { resolve(); return; }
+      const waiter = { handle: null, resolve };
+      waiter.handle = setTimer(() => {
+        timerWaiters.delete(waiter);
+        resolve();
+      }, 0);
+      timerWaiters.add(waiter);
+    });
+  }
+
+  let lastPaintAt = now();
+
+  function waitForPaint() {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let frameHandle = null;
+      let timerHandle = null;
+      const finish = (outcome, error = null) => {
+        if (settled) return;
+        settled = true;
+        activePaints.delete(finish);
+        if (timerHandle !== null) clearTimer(timerHandle);
+        if (frameHandle !== null) cancelFrame?.(frameHandle);
+        if (error) reject(error); else resolve(outcome);
+      };
+      activePaints.add(finish);
+      timerHandle = setTimer(() => finish('timeout'), paintTimeoutMilliseconds);
+      try {
+        frameHandle = requestFrame(() => {
+          frameHandle = null;
+          // Promise continuations from a bare rAF run before the browser
+          // paints. Cross one task boundary so the loader really gets a frame.
+          Promise.resolve().then(taskYield).then(
+            () => finish('paint'), error => finish('error', error),
+          );
+        });
+      } catch (error) {
+        finish('error', error);
+      }
+    });
+  }
+
+  async function yieldThread(phase = 'unknown') {
+    phase = String(phase || 'unknown');
+    if (disposed) return;
+    const started = now();
+    add(phase, 'totalYields');
+    const paintDue = now() - lastPaintAt >= paintIntervalMilliseconds;
+    if (paintDue && isVisible() && typeof requestFrame === 'function') {
+      add(phase, 'paintAttempts');
+      const outcome = await waitForPaint();
+      const duration = Math.max(0, now() - started);
+      add(phase, 'paintYieldMilliseconds', duration);
+      if (outcome === 'paint') add(phase, 'paintYields');
+      else if (outcome === 'timeout') add(phase, 'paintTimeouts');
+      if (outcome !== 'disposed') lastPaintAt = now();
+      return;
+    }
+    add(phase, 'taskYields');
+    await taskYield();
+    add(phase, 'taskYieldMilliseconds', Math.max(0, now() - started));
+  }
+
+  function snapshot() {
+    const copy = value => ({ ...value,
+      totalYieldMilliseconds: value.taskYieldMilliseconds + value.paintYieldMilliseconds,
+    });
+    return {
+      backend,
+      paintIntervalMilliseconds,
+      paintTimeoutMilliseconds,
+      ...copy(totals),
+      phases: Object.fromEntries(Object.entries(phases).map(([phase, value]) => [phase, copy(value)])),
+    };
+  }
+
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    for (const finish of [...activePaints]) finish('disposed');
+    for (const waiter of timerWaiters) {
+      clearTimer(waiter.handle);
+      waiter.resolve();
+    }
+    timerWaiters.clear();
+    while (channelWaiters.length) channelWaiters.shift().resolve();
+    if (channel) {
+      channel.port1.onmessage = null;
+      channel.port1.close?.();
+      channel.port2.close?.();
+      channel = null;
+    }
+  }
+
+  return { yield: yieldThread, snapshot, dispose };
+}
+
 function telemetryPublishDue(lastPublishedAt, now, visible = false, force = false,
     intervalMilliseconds = 250) {
   return Boolean(force || visible || !Number.isFinite(lastPublishedAt) ||
@@ -1105,7 +1287,8 @@ class DebrisApp {
     this.lastResourceStatsAt = -Infinity;
     this.stats = {
       frames: 0, drawCalls: 0, triangles: 0, startedAt: 0,
-      precalcMilliseconds: 0, frameMilliseconds: 0,
+      precalcMilliseconds: 0, preparationMilliseconds: 0,
+      precalcScheduling: null, frameMilliseconds: 0,
       runtimeMilliseconds: 0, renderMilliseconds: 0,
       snapshotBytes: 0, snapshotCount: 0,
       loaderAudioBackend: 'disabled', loaderAudioQueueBytes: 0,
@@ -1287,6 +1470,8 @@ class DebrisApp {
     // main synth so the two soundtracks never overlap. Fixed-time/debug
     // rendering deliberately remains silent.
     let loaderAudio = null;
+    let preparationScheduler = null;
+    let preparationStartedAt = 0;
     let initializationError = null;
     let loaderCloseError = null;
     try {
@@ -1330,16 +1515,25 @@ class DebrisApp {
 
       await waitForLifecycle(nextFramePromise(), token.signal);
       this.assertLifecycle(token);
+      preparationStartedAt = performance.now();
+      preparationScheduler = this.dependencies.createPreparationScheduler({
+        paintIntervalMilliseconds: this.options.precalcPaintIntervalMilliseconds ?? 450,
+        paintTimeoutMilliseconds: this.options.precalcPaintTimeoutMilliseconds ?? 100,
+      });
       const precalcStart = performance.now();
       this.setStatus('precalculating textures and geometry…');
       this.assertLifecycle(token);
       if (typeof this.runtime.precalcAsync === 'function') {
+        let lastPrecalcPercent = -1;
         await waitForLifecycle(this.runtime.precalcAsync(this.runtime.currentRoot, {
           budgetMilliseconds: this.options.precalcFrameBudget ?? 12,
           signal: token.signal,
+          yield: () => preparationScheduler.yield('graph'),
           onProgress: progress => {
             if (!this.lifecycleIsActive(token)) return;
             const percent = Math.min(99, Math.floor(progress.completed * 100 / progress.total));
+            if (percent === lastPrecalcPercent) return;
+            lastPrecalcPercent = percent;
             this.setStatus(`precalculating textures and geometry… ${percent}%`);
           },
         }), token.signal);
@@ -1360,6 +1554,7 @@ class DebrisApp {
       const playbackGeometry = await waitForLifecycle(prepareStaticTerminalGeometry(this.runtime, {
         budgetMilliseconds: this.options.precalcFrameBudget ?? 12,
         signal: token.signal,
+        yield: () => preparationScheduler.yield('geometry'),
       }), token.signal);
       this.assertLifecycle(token);
       this.stats.playbackGeometry = playbackGeometry;
@@ -1390,17 +1585,21 @@ class DebrisApp {
         this.setStatus('warming playback resources… 0%');
         this.assertLifecycle(token);
         const playbackRenderer = this.renderer;
+        let lastWarmupPercent = 0;
         const playbackWarmup = await waitForLifecycle(playbackRenderer.prewarmResources(plan, {
           budgetMilliseconds: Math.min(12, this.options.precalcFrameBudget ?? 8),
           maxResidentBytes,
           maxResourceBytes,
           signal: token.signal,
           shouldAbort: () => !this.lifecycleIsActive(token),
+          yield: () => preparationScheduler.yield('warmup'),
           onProgress: progress => {
             if (!this.lifecycleIsActive(token)) return;
             const percent = Math.min(99, Math.floor(
               progress.completedTasks * 100 / Math.max(1, progress.plannedTasks),
             ));
+            if (percent === lastWarmupPercent) return;
+            lastWarmupPercent = percent;
             this.setStatus(`warming playback resources… ${percent}%`);
           },
         }), token.signal);
@@ -1418,6 +1617,12 @@ class DebrisApp {
     } catch (error) {
       initializationError = error;
     } finally {
+      if (preparationScheduler) {
+        this.stats.preparationMilliseconds = performance.now() - preparationStartedAt;
+        preparationScheduler.dispose();
+        this.stats.precalcScheduling = preparationScheduler.snapshot();
+        preparationScheduler = null;
+      }
       // Drop every path back to the loader Worker/synth after bounded resource
       // warming, but before constructing the main soundtrack player.
       const closingLoaderAudio = loaderAudio;
@@ -1987,6 +2192,7 @@ export {
   documentDuration,
   estimateObjectBytes,
   collectPlaybackResourcePlan,
+  createPreparationScheduler,
   discardPreparedGeometry,
   terminalStaticGeometry,
   prepareStaticTerminalGeometry,

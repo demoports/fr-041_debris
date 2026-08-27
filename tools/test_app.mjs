@@ -46,7 +46,121 @@ assert.equal(D.telemetryPublishDue(10, 11, true, false, 250), true,
   'a visible stats overlay may update every frame');
 assert.equal(D.telemetryPublishDue(10, 11, false, true, 250), true,
   'explicit fixed-frame telemetry can force a publication');
+
+// Preparation normally yields to a task, reserving the much more expensive
+// animation-frame handoff for the loader's visible 450ms paint cadence.
+{
+  let clock = 0;
+  let visible = true;
+  let taskYields = 0;
+  let frameYields = 0;
+  let timerId = 0;
+  const scheduler = D.createPreparationScheduler({
+    now: () => clock,
+    isVisible: () => visible,
+    taskYield: async () => { taskYields++; clock += 2; },
+    requestFrame(callback) { frameYields++; clock += 8; callback(clock); return frameYields; },
+    cancelFrame() {},
+    setTimer: () => ++timerId,
+    clearTimer() {},
+    paintIntervalMilliseconds: 450,
+  });
+  await scheduler.yield('graph');
+  assert.deepEqual({ taskYields, frameYields }, { taskYields: 1, frameYields: 0 });
+  clock = 451;
+  await scheduler.yield('graph');
+  assert.deepEqual({ taskYields, frameYields }, { taskYields: 2, frameYields: 1 },
+    'a paint handoff crosses both rAF and a posted-task boundary');
+  clock = 912;
+  visible = false;
+  await scheduler.yield('geometry');
+  assert.equal(frameYields, 1, 'a hidden loader never waits for throttled animation frames');
+  visible = true;
+  await scheduler.yield('geometry');
+  assert.equal(frameYields, 2, 'an overdue loader paints immediately after becoming visible');
+  const snapshot = scheduler.snapshot();
+  assert.deepEqual({
+    backend: snapshot.backend,
+    totalYields: snapshot.totalYields,
+    taskYields: snapshot.taskYields,
+    paintAttempts: snapshot.paintAttempts,
+    paintYields: snapshot.paintYields,
+    paintTimeouts: snapshot.paintTimeouts,
+    graphYields: snapshot.phases.graph.totalYields,
+    geometryYields: snapshot.phases.geometry.totalYields,
+    totalYieldMilliseconds: snapshot.totalYieldMilliseconds,
+  }, {
+    backend: 'injected', totalYields: 4, taskYields: 2,
+    paintAttempts: 2, paintYields: 2, paintTimeouts: 0,
+    graphYields: 2, geometryYields: 2, totalYieldMilliseconds: 24,
+  });
+  scheduler.dispose();
+  scheduler.dispose();
+  await scheduler.yield('late');
+  assert.deepEqual(scheduler.snapshot(), snapshot,
+    'scheduler snapshots are detached and disposal is idempotent');
+}
+
+// A throttled/occluded rAF cannot strand initialization indefinitely.
+{
+  let clock = 0;
+  let timeout = null;
+  let cancelledFrame = null;
+  const scheduler = D.createPreparationScheduler({
+    now: () => clock,
+    taskYield: async () => {},
+    requestFrame: () => 77,
+    cancelFrame: handle => { cancelledFrame = handle; },
+    setTimer(callback) { timeout = callback; return 12; },
+    clearTimer() {},
+    paintIntervalMilliseconds: 10,
+    paintTimeoutMilliseconds: 100,
+  });
+  clock = 11;
+  const yielding = scheduler.yield('warmup');
+  clock = 111;
+  timeout();
+  await yielding;
+  const snapshot = scheduler.snapshot();
+  assert.equal(cancelledFrame, 77);
+  assert.equal(snapshot.paintAttempts, 1);
+  assert.equal(snapshot.paintTimeouts, 1);
+  assert.equal(snapshot.paintYieldMilliseconds, 100);
+  scheduler.dispose();
+}
+
+{
+  let platformYields = 0;
+  const schedulerApi = { async yield() { platformYields++; } };
+  const scheduler = D.createPreparationScheduler({
+    schedulerApi, MessageChannelCtor: null, requestFrame: null,
+  });
+  await scheduler.yield('graph');
+  assert.equal(platformYields, 1);
+  assert.equal(scheduler.snapshot().backend, 'scheduler');
+  scheduler.dispose();
+}
+
+if (typeof globalThis.MessageChannel === 'function') {
+  const scheduler = D.createPreparationScheduler({
+    schedulerApi: null, requestFrame: null,
+  });
+  await scheduler.yield('graph');
+  assert.equal(scheduler.snapshot().backend, 'message-channel');
+  scheduler.dispose();
+}
+
+{
+  const scheduler = D.createPreparationScheduler({
+    schedulerApi: null, MessageChannelCtor: null, requestFrame: null,
+  });
+  await scheduler.yield('graph');
+  assert.equal(scheduler.snapshot().backend, 'timeout');
+  scheduler.dispose();
+}
+
 const indexSource = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const appSource = fs.readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
 assert.match(indexSource, /telemetryPublishDue\(/);
 assert.match(indexSource, /STATS_PUBLISH_INTERVAL_MS\s*=\s*250/);
 assert.match(indexSource, /<script type="module">\s*import \{ DebrisApp, telemetryPublishDue \}/);
@@ -74,6 +188,14 @@ assert.match(indexSource, /#loader\s*\{[^}]*background:\s*#000;/s,
   'the native-style loader retains its plain black background');
 assert.match(indexSource, /loaderPaintedAt \+ 450/,
   'the progress display keeps the released player\'s roughly 450ms presentation cadence');
+assert.match(indexSource, /debrisPrecalcYieldBackend/,
+  'production telemetry exposes the cooperative preparation backend');
+assert.match(appModule.createPreparationScheduler.toString(),
+  /schedulerApi\.yield[\s\S]*MessageChannelCtor[\s\S]*setTimer/,
+  'preparation prefers Scheduler, then MessageChannel, then timer tasks');
+assert.match(appSource,
+  /yield: \(\) => preparationScheduler\.yield\('graph'\)[\s\S]*yield: \(\) => preparationScheduler\.yield\('geometry'\)[\s\S]*yield: \(\) => preparationScheduler\.yield\('warmup'\)/,
+  'one app-owned scheduler covers graph, geometry, and resource preparation');
 assert.match(indexSource, /\^precalculating textures and geometry…\\s\*\(\\d\+\)%\$/,
   'the native-style bar is driven by real graph-precalc completion');
 assert.match(indexSource, /error\?\.name === 'AbortError'/,
