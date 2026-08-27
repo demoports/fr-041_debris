@@ -129,6 +129,14 @@ assert.ok(Math.abs(translations[2] - (0.1 + 2 / 3)) < 1e-6);
 const firstInstances = env.frame.meshJobs[0].instances;
 const firstMatrices = firstInstances.slice();
 const particleMemory = env.instanceFor(particleCall.op);
+assert.ok(particleMemory.pos instanceof Float32Array);
+assert.ok(particleMemory.speed instanceof Float32Array);
+assert.ok(particleMemory.rot instanceof Float32Array);
+assert.ok(particleMemory.rotSpeed instanceof Float32Array);
+assert.equal(particleMemory.pos.length, particleParameters[1] * 4);
+assert.equal(particleMemory.speed.length, particleParameters[1] * 4);
+assert.equal(particleMemory.rot.length, particleParameters[1] * 3);
+assert.equal(particleMemory.rotSpeed.length, particleParameters[1] * 3);
 const scratchDescriptor = Object.getOwnPropertyDescriptor(particleMemory, '_particleScratch');
 assert.ok(scratchDescriptor);
 assert.equal(scratchDescriptor.enumerable, false,
@@ -152,8 +160,9 @@ for (let index = 0; index < secondInstances.length; index++) {
     `particle ${index} reuses its rotation scratch`);
 }
 for (let index = 0; index < secondInstances.length; index++) {
-  let fraction = particleParameters[12] + particleMemory.pos[index][3] +
-    particleMemory.randForw * particleMemory.speed[index][3] * particleParameters[12];
+  const stateOffset = index * 4;
+  let fraction = particleParameters[12] + particleMemory.pos[stateOffset + 3] +
+    particleMemory.randForw * particleMemory.speed[stateOffset + 3] * particleParameters[12];
   while (fraction >= 1) fraction -= 1;
   const translated = D.mat4Identity();
   translated[12] += fraction;
@@ -170,6 +179,11 @@ const oracleEnvironment = environment();
 const oracleCall = callFor(0xc5, particleParameters.slice(), [mesh], oracleEnvironment);
 oracleCall.op.cache = particleHandler.init(oracleCall);
 particleHandler.exec(oracleCall);
+const oracleMemory = oracleEnvironment.instanceFor(oracleCall.op);
+assert.deepEqual(Array.from(particleMemory.pos), Array.from(oracleMemory.pos));
+assert.deepEqual(Array.from(particleMemory.speed), Array.from(oracleMemory.speed));
+assert.deepEqual(Array.from(particleMemory.rot), Array.from(oracleMemory.rot));
+assert.deepEqual(Array.from(particleMemory.rotSpeed), Array.from(oracleMemory.rotSpeed));
 assert.deepEqual(
   secondInstances.map(matrix => Array.from(matrix)),
   oracleEnvironment.frame.meshJobs[0].instances.map(matrix => Array.from(matrix)),
@@ -180,8 +194,22 @@ assert.deepEqual(
 // the cache must be absent from the clone and reconstructed on the next frame.
 const snapshotMemory = cloneSnapshotState(particleMemory);
 assert.equal(Object.hasOwn(snapshotMemory, '_particleScratch'), false);
-env.restoreInstance(particleCall.op, snapshotMemory);
+assert.notEqual(snapshotMemory.pos, particleMemory.pos);
+assert.notEqual(snapshotMemory.speed, particleMemory.speed);
+assert.notEqual(snapshotMemory.rot, particleMemory.rot);
+assert.notEqual(snapshotMemory.rotSpeed, particleMemory.rotSpeed);
+assert.deepEqual(Array.from(snapshotMemory.pos), Array.from(particleMemory.pos));
+assert.deepEqual(Array.from(snapshotMemory.speed), Array.from(particleMemory.speed));
+assert.deepEqual(Array.from(snapshotMemory.rot), Array.from(particleMemory.rot));
+assert.deepEqual(Array.from(snapshotMemory.rotSpeed), Array.from(particleMemory.rotSpeed));
+
 particleParameters[12] = 0.6;
+D.beginRenderFrame(env);
+particleHandler.exec(particleCall);
+const expectedRestoredMatrices = env.frame.meshJobs[0].instances
+  .map(matrix => Array.from(matrix));
+
+env.restoreInstance(particleCall.op, snapshotMemory);
 D.beginRenderFrame(env);
 particleHandler.exec(particleCall);
 const restoredMemory = env.instanceFor(particleCall.op);
@@ -191,6 +219,11 @@ assert.equal(restoredDescriptor.enumerable, false);
 assert.notEqual(restoredDescriptor.value, firstScratch);
 assert.notEqual(env.frame.meshJobs[0].instances, firstInstances,
   'restored state receives a fresh derivable instances cache');
+assert.deepEqual(
+  env.frame.meshJobs[0].instances.map(matrix => Array.from(matrix)),
+  expectedRestoredMatrices,
+  'snapshot restoration reproduces bit-identical particle matrices',
+);
 
 const restoredInstances = env.frame.meshJobs[0].instances;
 D.beginRenderFrame(env);
@@ -198,6 +231,70 @@ particleParameters[12] = 0.7;
 particleHandler.exec(particleCall);
 assert.equal(env.frame.meshJobs[0].instances, restoredInstances,
   'the recovered instances cache is reused by later frames');
+
+// The authored random state remains stable while only animation inputs change.
+// Any parameter that authors that state must replace all packed buffers so a
+// snapshot cannot retain stale particle data.
+{
+  const packedEnvironment = environment();
+  const packedParameters = new Array(30).fill(0);
+  packedParameters[0] = 0x110;
+  packedParameters[1] = 5;
+  packedParameters[2] = 0x1234;
+  packedParameters[3] = 2;
+  packedParameters[4] = 3;
+  packedParameters[5] = 4;
+  packedParameters[6] = 0.2;
+  packedParameters[7] = 0.3;
+  packedParameters[8] = 0.4;
+  packedParameters[9] = 0.15;
+  packedParameters[10] = 0.1;
+  packedParameters[11] = 0.05;
+  packedParameters[12] = 0.35;
+  packedParameters[13] = 1;
+  packedParameters[16] = 0.5;
+  packedParameters[22] = 0.25;
+  packedParameters[23] = 0.1;
+  packedParameters[24] = 0.02;
+  packedParameters[25] = 0.03;
+  packedParameters[26] = 0.04;
+  const packedCall = callFor(0xc5, packedParameters, [mesh], packedEnvironment);
+  packedCall.op.cache = particleHandler.init(packedCall);
+  particleHandler.exec(packedCall);
+  const packedMemory = packedEnvironment.instanceFor(packedCall.op);
+  const initialBuffers = {
+    pos: packedMemory.pos,
+    speed: packedMemory.speed,
+    rot: packedMemory.rot,
+    rotSpeed: packedMemory.rotSpeed,
+  };
+
+  const twinEnvironment = environment();
+  const twinCall = callFor(0xc5, packedParameters.slice(), [mesh], twinEnvironment);
+  twinCall.op.cache = particleHandler.init(twinCall);
+  particleHandler.exec(twinCall);
+  assert.deepEqual(
+    packedEnvironment.frame.meshJobs[0].instances.map(matrix => Array.from(matrix)),
+    twinEnvironment.frame.meshJobs[0].instances.map(matrix => Array.from(matrix)),
+    'independently initialized packed particle calls produce bit-identical matrices',
+  );
+
+  packedParameters[12] = 0.55;
+  D.beginRenderFrame(packedEnvironment);
+  particleHandler.exec(packedCall);
+  assert.equal(packedMemory.pos, initialBuffers.pos);
+  assert.equal(packedMemory.speed, initialBuffers.speed);
+  assert.equal(packedMemory.rot, initialBuffers.rot);
+  assert.equal(packedMemory.rotSpeed, initialBuffers.rotSpeed);
+
+  packedParameters[2]++;
+  D.beginRenderFrame(packedEnvironment);
+  particleHandler.exec(packedCall);
+  assert.notEqual(packedMemory.pos, initialBuffers.pos);
+  assert.notEqual(packedMemory.speed, initialBuffers.speed);
+  assert.notEqual(packedMemory.rot, initialBuffers.rot);
+  assert.notEqual(packedMemory.rotSpeed, initialBuffers.rotSpeed);
+}
 
 // Generated BlobSpline paths can write directly into each particle's cached
 // output matrix. Their evaluation scratch belongs to the particle operator,

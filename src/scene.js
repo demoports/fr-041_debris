@@ -369,20 +369,21 @@ function initParticleMemory(mem, p) {
   mem.randForw = f32(p[22] || 0);
   mem.randRotSpeed = new Float32Array(p.slice(24, 27));
   mem.comeOut = f32(p[23] || 0);
-  mem.pos = new Array(count);
-  mem.speed = new Array(count);
-  mem.rot = mode & 0x10 ? new Array(count) : null;
-  mem.rotSpeed = mode & 0x10 ? new Array(count) : null;
+  mem.pos = new Float32Array(count * 4);
+  mem.speed = new Float32Array(count * 4);
+  mem.rot = mode & 0x10 ? new Float32Array(count * 3) : null;
+  mem.rotSpeed = mode & 0x10 ? new Float32Array(count * 3) : null;
 
   const random = new Random();
+  const pos = new Float32Array(4);
+  const speed = new Float32Array(4);
   random.setSeed(seed);
   for (let i = 0; i < count; i++) {
-    const pos = new Float32Array(4);
     do {
       pos[0] = f32(random.float(2) - 1);
       pos[1] = f32(random.float(2) - 1);
       pos[2] = f32(random.float(2) - 1);
-      if ((mode & 12) === 4) pos.set(vec3Normalize(pos), 0);
+      if ((mode & 12) === 4) vec3Normalize(pos, pos);
     } while ((mode & 12) === 8 && pos[0] ** 2 + pos[1] ** 2 + pos[2] ** 2 > 1);
     pos[3] = mode & 0x20
       ? f32(i / count)
@@ -390,28 +391,24 @@ function initParticleMemory(mem, p) {
     pos[0] = f32(pos[0] * mem.rand[0] * 0.5);
     pos[1] = f32(pos[1] * mem.rand[1] * 0.5);
     pos[2] = f32(pos[2] * mem.rand[2] * 0.5);
-    mem.pos[i] = pos;
+    mem.pos.set(pos, i * 4);
 
-    const speed = new Float32Array(4);
     do {
       speed[0] = f32(random.float(2) - 1);
       speed[1] = f32(random.float(2) - 1);
       speed[2] = f32(random.float(2) - 1);
     } while (speed[0] ** 2 + speed[1] ** 2 + speed[2] ** 2 > 1);
     speed[3] = random.float();
-    mem.speed[i] = speed;
+    mem.speed.set(speed, i * 4);
 
     if (mem.rot) {
-      mem.rot[i] = new Float32Array([
-        random.float(mem.randRot[0]),
-        random.float(mem.randRot[1]),
-        random.float(mem.randRot[2]),
-      ]);
-      mem.rotSpeed[i] = new Float32Array([
-        random.float(mem.randRotSpeed[0]),
-        random.float(mem.randRotSpeed[1]),
-        random.float(mem.randRotSpeed[2]),
-      ]);
+      const offset = i * 3;
+      mem.rot[offset] = random.float(mem.randRot[0]);
+      mem.rot[offset + 1] = random.float(mem.randRot[1]);
+      mem.rot[offset + 2] = random.float(mem.randRot[2]);
+      mem.rotSpeed[offset] = random.float(mem.randRotSpeed[0]);
+      mem.rotSpeed[offset + 1] = random.float(mem.randRotSpeed[1]);
+      mem.rotSpeed[offset + 2] = random.float(mem.randRotSpeed[2]);
     }
   }
 }
@@ -484,7 +481,9 @@ function execParticles(call) {
   const pulseRate = p[27], pulsePhase = p[28], pulseAmount = p[29];
 
   for (let i = 0; i < mem.count; i++) {
-    let fraction = anim + mem.pos[i][3] + mem.randForw * mem.speed[i][3] * anim;
+    const stateOffset = i * 4;
+    let fraction = anim + mem.pos[stateOffset + 3] +
+      mem.randForw * mem.speed[stateOffset + 3] * anim;
     if (fraction < 1 && (mode & 64)) continue;
     while (fraction >= 1) fraction -= 1;
 
@@ -492,9 +491,9 @@ function execParticles(call) {
     const matrix = mat4Identity(particle.matrix);
     const g = fraction * fraction;
     const position = particle.position;
-    position[0] = mem.pos[i][0] + mem.speed[i][0] * fraction * randomSpeed + g * gravityX;
-    position[1] = mem.pos[i][1] + mem.speed[i][1] * fraction * randomSpeed + g * gravityY;
-    position[2] = mem.pos[i][2] + mem.speed[i][2] * fraction * randomSpeed + g * gravityZ;
+    position[0] = mem.pos[stateOffset] + mem.speed[stateOffset] * fraction * randomSpeed + g * gravityX;
+    position[1] = mem.pos[stateOffset + 1] + mem.speed[stateOffset + 1] * fraction * randomSpeed + g * gravityY;
+    position[2] = mem.pos[stateOffset + 2] + mem.speed[stateOffset + 2] * fraction * randomSpeed + g * gravityZ;
     if (pulseAmount) {
       const scale = Math.sin(anim * Math.PI * 2 * pulseRate +
         fraction * Math.PI * 2 * pulsePhase) * pulseAmount + 1;
@@ -539,12 +538,16 @@ function execParticles(call) {
       let ry = fraction * p[10];
       let rz = fraction * p[11];
       if (mem.rot) {
-        rx += mem.rot[i][0]; ry += mem.rot[i][1]; rz += mem.rot[i][2];
+        const rotationOffset = i * 3;
+        rx += mem.rot[rotationOffset];
+        ry += mem.rot[rotationOffset + 1];
+        rz += mem.rot[rotationOffset + 2];
       }
       if (mem.rotSpeed) {
-        rx += mem.rotSpeed[i][0] * fraction;
-        ry += mem.rotSpeed[i][1] * fraction;
-        rz += mem.rotSpeed[i][2] * fraction;
+        const rotationOffset = i * 3;
+        rx += mem.rotSpeed[rotationOffset] * fraction;
+        ry += mem.rotSpeed[rotationOffset + 1] * fraction;
+        rz += mem.rotSpeed[rotationOffset + 2] * fraction;
       }
       mat4Euler(rx, ry, rz, particle.rotation);
       mat4MulA(particle.rotation, matrix, scratch.composedMatrix);
