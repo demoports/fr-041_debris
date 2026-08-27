@@ -348,12 +348,49 @@ const multipliedB = invoke(0x95, [...multiplyWords.slice(0, 17), 0x87654321], [c
 assert.deepEqual(multipliedA.summary(), multipliedB.summary());
 assert.equal(multipliedA.vertices.length, 48);
 assert.deepEqual(multipliedA.summary().bounds, { min: [-0.5, -0.5, -0.5], max: [1.5, 0.5, 0.5] });
+assert.ok(multipliedA.vertices.slice(0, 24).every(vertex => !vertex.select));
+assert.ok(multipliedA.vertices.slice(24).every(vertex => vertex.select),
+  'Multiply leaves only its final appended instance selected');
+
+const rangedMultiplySource = cube.clone();
+const rangedMultiplyNormals = cube.clone().needNormals();
+const rangedMultiply = D.Mesh_Multiply(
+  rangedMultiplySource, identitySRT, 3, 1, 0.25, 0.5, [0, 0, 0], 0.125,
+);
+for (let instance = 0; instance < 3; instance++) {
+  const vertex = rangedMultiply.vertices[instance * cube.vertices.length];
+  const sourceVertex = rangedMultiplyNormals.vertices[0];
+  assert.deepEqual(Array.from(vertex.position.slice(0, 3)), [0, 1, 2].map(axis => Math.fround(
+    sourceVertex.position[axis] + sourceVertex.normal[axis] * instance * 0.125,
+  )), 'ranged Multiply retains the extrude transform on every appended instance');
+  assert.deepEqual(Array.from(vertex.uv.slice(0, 2)), [
+    Math.fround(sourceVertex.uv[0] + instance * 0.25),
+    Math.fround(sourceVertex.uv[1] + instance * 0.5),
+  ], 'ranged Multiply retains per-instance UV translation');
+}
+assert.ok(rangedMultiply.vertices.slice(0, 48).every(vertex => !vertex.select));
+assert.ok(rangedMultiply.vertices.slice(48).every(vertex => vertex.select));
 
 const multiply2Words = [17, 2, 1, 1, 2, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0];
 const tiledA = invoke(0xb4, multiply2Words, [cube, moved]);
 const tiledB = invoke(0xb4, multiply2Words, [cube, moved]);
 assert.deepEqual(tiledA.summary(), tiledB.summary());
 assert.equal(tiledA.vertices.length, 48);
+assert.ok(tiledA.vertices.slice(0, 24).every(vertex => !vertex.select));
+assert.ok(tiledA.vertices.slice(24).every(vertex => vertex.select),
+  'Multiply2 leaves only its final appended instance selected');
+
+const heterogeneousGrid = D.Mesh_Grid(0, 1, 1);
+const heterogeneousMultiply2 = D.Mesh_Multiply2(
+  [cube, heterogeneousGrid], 17,
+  [4, 1, 1], [1, 0, 0], [1, 1, 1], [0, 0, 0], 0,
+  [1, 1, 1], [0, 0, 0], [],
+);
+assert.equal(heterogeneousMultiply2.vertices.length, 64,
+  'heterogeneous Multiply2 preserves the deterministic source sequence');
+assert.ok(heterogeneousMultiply2.vertices.slice(0, 40).every(vertex => !vertex.select));
+assert.ok(heterogeneousMultiply2.vertices.slice(40).every(vertex => vertex.select),
+  'a differently sized final instance owns the complete selected suffix');
 
 const cylinder = invoke(0x82, [8, 1, 0, 1, 0]);
 assert.deepEqual(

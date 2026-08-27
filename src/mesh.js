@@ -6,7 +6,6 @@ import {
   mat4Identity,
   mat4Mul,
   mat4SRT,
-  mat4TransformPoint,
 } from './core.js';
 
   // Plain JavaScript port of the old (pre GenMinMesh) werkkzeug3 GenMesh.
@@ -173,8 +172,13 @@ import {
   }
 
   function transformXYZ(matrix, value, out = new Float32Array(4), w = undefined) {
-    const source = w === undefined ? value : [value[0], value[1], value[2], w];
-    return mat4TransformPoint(matrix, source, out);
+    const x = value[0], y = value[1], z = value[2];
+    if (w === undefined) w = value.length > 3 ? value[3] : 1;
+    out[0] = f32(matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12] * w);
+    out[1] = f32(matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13] * w);
+    out[2] = f32(matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14] * w);
+    out[3] = f32(matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15] * w);
+    return out;
   }
 
   function matrixIdentity() { return mat4Identity(new Float32Array(16)); }
@@ -1088,18 +1092,27 @@ import {
       return this;
     }
 
-    transformVertices(matrix, sourceAttribute = ATTR.POS, destinationAttribute = ATTR.POS) {
+    transformVertices(matrix, sourceAttribute = ATTR.POS, destinationAttribute = ATTR.POS,
+      start = 0, end = undefined) {
       const sourceIndex = this.attributeMap(sourceAttribute);
       const destinationIndex = this.attributeMap(destinationAttribute & 15);
       if (sourceIndex < 0 || destinationIndex < 0) return this;
       const additive = (destinationAttribute & 0x10) !== 0;
       const colorIndex = this.attributeMap(ATTR.COLOR0);
-      for (const vertex of this.vertices) {
+      const vertices = this.vertices;
+      start = Math.max(0, start | 0);
+      end = end === undefined ? vertices.length : Math.min(vertices.length, Math.max(start, end | 0));
+      // A transform can read and write the same attribute, so retain one
+      // call-local result vector. Allocating it inside the vertex loop created
+      // millions of short-lived typed arrays during Multiply/Multiply2.
+      const transformed = new Float32Array(4);
+      for (let index = start; index < end; index++) {
+        const vertex = vertices[index];
         if (!vertex.select) continue;
         const source = vertex.values[sourceIndex];
         const destination = vertex.values[destinationIndex];
         const sw = sourceIndex === colorIndex ? 1 : source[3];
-        const transformed = transformXYZ(matrix, source, new Float32Array(4), sw);
+        transformXYZ(matrix, source, transformed, sw);
         if (additive) {
           destination[0] = f32(destination[0] + transformed[0]);
           destination[1] = f32(destination[1] + transformed[1]);
@@ -2367,17 +2380,24 @@ import {
     const random = new Random();
     random.setSeed(count);
     if (extrude) source.needNormals();
+    let previousStart = 0, previousEnd = 0;
     for (let iteration = 0; iteration < count; iteration++) {
       const start = output.vertices.length;
       output.append(source);
-      for (let i = 0; i < start; i++) output.vertices[i].select = false;
-      for (let i = start; i < output.vertices.length; i++) output.vertices[i].select = true;
+      const end = output.vertices.length;
+      // Only the preceding copy can still be selected. Native selection state
+      // is unchanged, but avoiding the complete accumulated prefix turns the
+      // instancing loop back into linear work.
+      for (let i = previousStart; i < previousEnd; i++) output.vertices[i].select = false;
+      for (let i = start; i < end; i++) output.vertices[i].select = true;
       if (extrude) {
         const matrix = matrixIdentity();
         matrix[0] = matrix[5] = matrix[10] = f32(iteration * extrude);
-        output.transformVertices(matrix, ATTR.NORMAL, ATTR.POS | 0x10);
+        output.transformVertices(matrix, ATTR.NORMAL, ATTR.POS | 0x10, start, end);
       }
-      output.transformVertices(mat4Mul(transform, localTransform, new Float32Array(16)));
+      output.transformVertices(
+        mat4Mul(transform, localTransform, new Float32Array(16)), ATTR.POS, ATTR.POS, start, end,
+      );
       transform = mode & 2
         ? randomSRT(random, srt)
         : mat4Mul(step, transform, new Float32Array(16));
@@ -2386,8 +2406,10 @@ import {
         const matrix = matrixIdentity();
         matrix[12] = f32(iteration * translateU);
         matrix[13] = f32(iteration * translateV);
-        output.transformVertices(matrix, ATTR.UV0, ATTR.UV0);
+        output.transformVertices(matrix, ATTR.UV0, ATTR.UV0, start, end);
       }
+      previousStart = start;
+      previousEnd = end;
     }
     output.gotNormals = false;
     output._touch();
@@ -2421,7 +2443,7 @@ import {
           matrix[12] = f32(x1 * translate1[0] + x2 * translate2[0] + x3 * translate3[0]);
           matrix[13] = f32(y1 * translate1[1] + y2 * translate2[1] + y3 * translate3[1]);
           matrix[14] = f32(z1 * translate1[2] + z2 * translate2[2] + z3 * translate3[2]);
-          result.transformVertices(matrix);
+          result.transformVertices(matrix, ATTR.POS, ATTR.POS, start, result.vertices.length);
         }
       }
     }
