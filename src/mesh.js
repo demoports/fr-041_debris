@@ -973,6 +973,38 @@ import {
       return mesh;
     }
 
+    cloneForPositionTransform() {
+      const storage = this._compact;
+      if (!storage) return this.clone();
+      const mesh = new Mesh(this.vertexMask);
+      // A mask-zero Transform changes positions and resets all three selection
+      // domains. Topology and the remaining authored attributes stay immutable,
+      // so forked compact branches only need private copies of those channels.
+      mesh._compact = {
+        ...storage,
+        vertexPositions: storage.vertexPositions.slice(),
+        vertexBytes: storage.vertexBytes.slice(),
+        edgeBytes: storage.edgeBytes.slice(),
+        faceBytes: storage.faceBytes.slice(),
+      };
+      mesh.materials = this.materials.map(cloneSlot);
+      mesh.parts = this.parts.slice();
+      mesh.collisions = this.collisions.map(value => cloneCollision(value));
+      mesh.lights = this.lights.slice();
+      mesh.pivot = this.pivot | 0;
+      mesh.gotNormals = !!this.gotNormals;
+      mesh.stripped = !!this.stripped;
+      mesh._syncAliases();
+      return mesh;
+    }
+
+    compactMeshConversionView() {
+      if (!this._compact || this.released || this.topologyReleasedForPlayback) return null;
+      // Mesh_ToMin consumes this synchronously and read-only. Keeping the old
+      // compact layout behind a narrow view avoids a mesh/minmesh import cycle.
+      return { vertexMask: this.vertexMask, materials: this.materials, storage: this._compact };
+    }
+
     copy() { return this.clone(); }
 
     // Runtime precalc keeps every operator cache alive. The native graph used
@@ -1552,14 +1584,14 @@ import {
     return result;
   }
 
-  function dispatchMeshInputs(call, callback) {
+  function dispatchMeshInputs(call, callback, expandInputs = true) {
     const ownership = inputOwnership(call);
     const sources = [];
     const seen = new Set();
     for (const input of call.inputs) {
       if (!(input instanceof Mesh) || seen.has(input)) continue;
       seen.add(input);
-      input.ensureExpanded();
+      if (expandInputs) input.ensureExpanded();
       sources.push(input);
     }
     const result = callback(ownership);
@@ -2002,6 +2034,50 @@ import {
   }
 
   function Mesh_Transform(mesh, mask, srt, owned = false) {
+    const source = requireMesh(mesh);
+    if (source?._compact && (mask | 0) === 0) {
+      const result = owned ? source : source.cloneForPositionTransform();
+      const storage = result._compact;
+      if (owned) {
+        // Mesh ownership does not imply unique typed-buffer ownership: compact
+        // material branches may share their otherwise immutable positions.
+        storage.vertexPositions = storage.vertexPositions.slice();
+      }
+      for (let index = 0; index < storage.vertexCount; index++) storage.vertexBytes[index * 4 + 2] = 1;
+      for (let index = 0; index < storage.edgeCount; index++) storage.edgeBytes[index * 4 + 2] = 1;
+      for (let index = 0; index < storage.faceCount; index++) {
+        storage.faceBytes[index * 4 + 2] = storage.faceInts[index * 5] !== 0 ? 1 : 0;
+      }
+
+      if (result.attributeMap(ATTR.POS) >= 0) {
+        let matrix = mat4SRT(new Float32Array(srt), new Float32Array(16));
+        const pivot = result.pivot | 0;
+        if (pivot >= 0 && pivot < storage.vertexCount) {
+          const offset = pivot * 4;
+          const px = storage.vertexPositions[offset];
+          const py = storage.vertexPositions[offset + 1];
+          const pz = storage.vertexPositions[offset + 2];
+          const translate = matrixIdentity();
+          translate[12] = f32(-px); translate[13] = f32(-py); translate[14] = f32(-pz);
+          matrix = mat4Mul(matrix, translate, new Float32Array(16));
+          matrix[12] = f32(matrix[12] + px);
+          matrix[13] = f32(matrix[13] + py);
+          matrix[14] = f32(matrix[14] + pz);
+        }
+        const positions = storage.vertexPositions;
+        for (let index = 0; index < storage.vertexCount; index++) {
+          const offset = index * 4;
+          const x = positions[offset], y = positions[offset + 1];
+          const z = positions[offset + 2], w = positions[offset + 3];
+          positions[offset] = f32(matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12] * w);
+          positions[offset + 1] = f32(matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13] * w);
+          positions[offset + 2] = f32(matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14] * w);
+          positions[offset + 3] = w;
+        }
+      }
+      result.gotNormals = false;
+      return result._touch();
+    }
     const result = checkedCopy(mesh, (mask << 16) >>> 0, owned);
     if (!result) return null;
     const matrix = pivotTransform(result,
@@ -2055,6 +2131,12 @@ import {
     result.materials.push(materialSlot(material, pass));
     const storage = result._compact;
     if (storage) {
+      if (owned) {
+        // Compact Transform branches may share topology/material indices until
+        // an operator actually edits them. Detach this mutable channel before
+        // an owned MatLink changes the transferred mesh in place.
+        storage.faceInts = storage.faceInts.slice();
+      }
       if (!(selectionMask & 0x80000000)) {
         if (selectionMask) {
           if (selectionMask & 0x00ff0000) {
@@ -2759,8 +2841,12 @@ import {
     0x89: call => dispatchMeshInputs(call, ownership => Mesh_TransformEx(call.inputs[0], call.parameters[0],
       call.parameters.slice(1, 10), call.parameters[10], call.parameters[11], ownership[0])),
     0x92: call => dispatchMeshInputs(call, ownership => Mesh_Add(call.inputs, ownership)),
-    0x88: call => dispatchMeshInputs(call, ownership => Mesh_Transform(call.inputs[0], call.parameters[0],
-      call.parameters.slice(1, 10), ownership[0])),
+    0x88: call => dispatchMeshInputs(
+      call,
+      ownership => Mesh_Transform(call.inputs[0], call.parameters[0],
+        call.parameters.slice(1, 10), ownership[0]),
+      !((call.parameters[0] | 0) === 0 && call.inputs[0] instanceof Mesh && call.inputs[0]._compact),
+    ),
     0x9d: call => finalizeMeshOutput(call,
       Mesh_Grid(call.parameters[0], call.parameters[1], call.parameters[2])),
     0xa5: call => dispatchMeshInputs(call, ownership => Mesh_UVProjection(call.inputs[0], call.parameters[0],

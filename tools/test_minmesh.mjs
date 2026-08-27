@@ -6,7 +6,7 @@ import * as BitmapAPI from '../src/bitmap.js';
 import * as CoreAPI from '../src/core.js';
 import { parseKX } from '../src/kx.js';
 import * as MeshAPI from '../src/mesh.js';
-import { meshToMinHandlers } from '../src/mesh_to_min.js';
+import { Mesh_ToMin, meshToMinHandlers } from '../src/mesh_to_min.js';
 import * as MinMeshAPI from '../src/minmesh.js';
 import {
   geometryTopologyStats,
@@ -1240,6 +1240,14 @@ oldColorCube.vertices[0].color.set([1.2, 0.5, -0.2, 0.25]);
 const colorConverted = D.meshToMin(oldColorCube);
 assert.equal(colorConverted.vertices[0].color, 0x3fff7f00);
 assert.equal(colorConverted.vertices[1].color, 0x00000000);
+const compactZeroColorCube = D.Mesh_Cube(1, 1, 1, 0, identitySRT).compact();
+assert.equal(compactZeroColorCube._compact.vertexColors, null,
+  'all-zero compact COLOR0 is represented by an implicit channel');
+compactZeroColorCube.ensureExpanded = () => {
+  throw new Error('implicit compact COLOR0 conversion expanded its source');
+};
+assert.ok(D.meshToMin(compactZeroColorCube).vertices.every(vertex => vertex.color === 0),
+  'declared compact COLOR0 packs implicit zero instead of missing-channel white');
 const noColorCube = D.Mesh_Cube(1, 1, 1, 0, identitySRT);
 noColorCube.vertexMask &= ~D.MESH_FEATURE.COLOR0;
 assert.equal(D.meshToMin(noColorCube).vertices[0].color, 0xffffffff);
@@ -1255,7 +1263,11 @@ for (let index = 0; index < 8; index++) {
 }
 oldOctagon.setPolygons([{ verts: [0, 1, 2, 3, 4, 5, 6, 7], material: 1, select: true, used: false }]);
 oldOctagon.compact();
+oldOctagon.ensureExpanded = () => {
+  throw new Error('compact Mesh_ToMin expanded its source');
+};
 const convertedOctagon = D.meshToMin(oldOctagon);
+assert.ok(oldOctagon._compact, 'compact Mesh_ToMin leaves a non-owned source dormant');
 assert.equal(convertedOctagon.vertices.length, 9);
 assert.equal(convertedOctagon.faces.length, 8);
 assert.ok(convertedOctagon.faces.every(face => face.count === 3 && face.flags === 1));
@@ -1266,10 +1278,118 @@ assert.deepEqual(convertedOctagon.faces.map(face => face.vertices), [
   [8, 4, 5], [8, 5, 6], [8, 6, 7], [8, 7, 0],
 ]);
 
+const conversionFloatBits = value => Array.from(new Uint32Array(
+  value.buffer, value.byteOffset, value.byteLength / Uint32Array.BYTES_PER_ELEMENT,
+));
+const conversionSnapshot = mesh => ({
+  vertices: mesh.vertices.map(vertex => ({
+    select: vertex.select | 0,
+    boneCount: vertex.boneCount | 0,
+    tempByte: vertex.tempByte | 0,
+    mergeTag: vertex.mergeTag | 0,
+    color: vertex.color >>> 0,
+    position: conversionFloatBits(vertex.position),
+    normal: conversionFloatBits(vertex.normal),
+    tangent: conversionFloatBits(vertex.tangent),
+    uv0: conversionFloatBits(vertex.uv[0]),
+    uv1: conversionFloatBits(vertex.uv[1]),
+    weights: conversionFloatBits(vertex.weights),
+    matrices: Array.from(vertex.matrices),
+  })),
+  faces: mesh.faces.map(face => ({
+    select: face.select | 0,
+    count: face.count | 0,
+    cluster: face.cluster | 0,
+    flags: face.flags >>> 0,
+    vertices: Array.from(face.vertices),
+  })),
+  clusters: mesh.clusters.map(cluster => ({
+    material: cluster.material,
+    renderPass: cluster.renderPass | 0,
+    id: cluster.id | 0,
+    animType: cluster.animType | 0,
+    animMatrix: cluster.animMatrix | 0,
+  })),
+});
+
+// Exercise every old-record choice made by the direct flat converter: physical
+// First position versus per-corner attributes, multiple materials, deleted
+// faces, shadow flags, an eight-corner fan, UV1 and exact packed COLOR0 values.
+const conversionFixture = new D.Mesh(D.MESH_DEFAULT_VERTEX_MASK | D.MESH_FEATURE.UV1);
+const conversionMaterial = { kind: 'material', name: 'compact conversion material' };
+conversionFixture.materials.push({ material: conversionMaterial, pass: 9 });
+for (let index = 0; index < 8; index++) {
+  const angle = index * Math.PI * 2 / 8;
+  const vertexIndex = conversionFixture.addVertex(
+    [Math.cos(angle) * (index + 1), Math.sin(angle) * (index + 1), index * 0.25, 1],
+    [index === 0 ? -0 : index / 7, (7 - index) / 7],
+  );
+  const vertex = conversionFixture.vertices[vertexIndex];
+  vertex.color.set(index === 0
+    ? [1.2, 0.5, -0.2, 0.25]
+    : [index / 7, (7 - index) / 7, index / 14, index % 2]);
+  vertex.uv1.set([index + 10.25, index === 1 ? -0 : index + 20.5, 0, 1]);
+}
+conversionFixture.setPolygons([
+  { verts: [0, 1, 2, 3, 4, 5, 6, 7], material: 1, used: false },
+  { verts: [0, 2, 4], material: 2, used: true },
+  { verts: [1, 3, 5], material: 0, used: false },
+]);
+conversionFixture.vertices[3].first = 0;
+const expandedConversion = D.meshToMin(conversionFixture.clone());
+const compactConversionSource = conversionFixture.clone().compact();
+compactConversionSource.ensureExpanded = () => {
+  throw new Error('direct compact conversion reconstructed old records');
+};
+const compactConversion = D.meshToMin(compactConversionSource);
+const expandedConversionSnapshot = conversionSnapshot(expandedConversion);
+assert.deepEqual(conversionSnapshot(compactConversion), expandedConversionSnapshot,
+  'direct compact conversion is bitwise-equivalent to expanded old records');
+assert.deepEqual(compactConversion.prepare(), expandedConversion.prepare(),
+  'direct compact conversion prepares identical topology and attributes');
+assert.ok(compactConversionSource._compact, 'direct compact conversion is read-only');
+
+const bridgeConversionSource = conversionFixture.clone().compact();
+bridgeConversionSource.ensureExpanded = () => {
+  throw new Error('Mesh_ToMin bridge expanded its compact source');
+};
+assert.deepEqual(conversionSnapshot(Mesh_ToMin(bridgeConversionSource)),
+  expandedConversionSnapshot, 'Mesh_ToMin bridge preserves the direct compact path');
+
+const disposableCompactConversion = conversionFixture.clone().compact();
+disposableCompactConversion.ensureExpanded = () => {
+  throw new Error('unique compact conversion expanded its source');
+};
+const forcedCompactMeshToMin = D.createMeshToMinHandler(() => true);
+assert.deepEqual(conversionSnapshot(forcedCompactMeshToMin({ inputs: [disposableCompactConversion] })),
+  expandedConversionSnapshot);
+assert.equal(disposableCompactConversion.released, true,
+  'unique compact old-Mesh storage is released after direct conversion');
+
 const noUV1Octagon = D.Mesh_Cube(1, 1, 1, 0, identitySRT);
 noUV1Octagon.vertices[0].uv1.set([0.25, 0.75]);
+noUV1Octagon.compact();
+assert.ok(noUV1Octagon._compact.vertexUV1s,
+  'dormant UV1 data survives even when the old vertex format omits UV1');
+noUV1Octagon.ensureExpanded = () => {
+  throw new Error('absent compact UV1 conversion expanded its source');
+};
 assert.deepEqual(Array.from(D.meshToMin(noUV1Octagon).vertices[0].uv[1]), [0, 0],
   'UV1 data is ignored when the old vertex format omits UV1');
+
+const noUV0Cube = D.Mesh_Cube(1, 1, 1, 0, identitySRT);
+noUV0Cube.vertexMask &= ~D.MESH_FEATURE.UV0;
+noUV0Cube.vertices[0].uv.set([0.25, 0.75]);
+assert.deepEqual(Array.from(D.meshToMin(noUV0Cube.clone()).vertices[0].uv[0]), [0, 0],
+  'expanded conversion ignores UV0 data absent from the old vertex format');
+noUV0Cube.compact();
+assert.ok(noUV0Cube._compact.vertexUVs,
+  'dormant UV0 data survives even when the old vertex format omits UV0');
+noUV0Cube.ensureExpanded = () => {
+  throw new Error('absent compact UV0 conversion expanded its source');
+};
+assert.deepEqual(Array.from(D.meshToMin(noUV0Cube).vertices[0].uv[0]), [0, 0],
+  'compact conversion ignores UV0 data absent from the old vertex format');
 
 const weightedOldMesh = D.Mesh_Cube(1, 1, 1, 0, identitySRT);
 weightedOldMesh.vertices[0].weights.set([255, 0, 0, 0]);

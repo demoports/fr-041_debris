@@ -618,6 +618,99 @@ assert.deepEqual(Array.from(pivotScaled.vertices[0].position), pivotPosition,
   'Transform applies SRT around the stored native pivot');
 assert.deepEqual(Array.from(pivotScaled.vertices[1].position), [-0.5, -0.5, 3.5, 1]);
 
+// A dormant mask-zero Transform stays in flat storage. Its compact COW path
+// must retain the expanded operator's exact pivot, selection and metadata
+// semantics while sharing only channels that remain immutable.
+const compactTransformFixture = D.Mesh_Cube(1, 1, 1, 0, identitySRT);
+compactTransformFixture.pivot = 3;
+compactTransformFixture.vertices[3].first = 0;
+compactTransformFixture.faces[0].material = 0;
+compactTransformFixture.vertices[0].select = false;
+compactTransformFixture.edges[0].select = false;
+compactTransformFixture.faces[1].select = false;
+compactTransformFixture.vertices[0].position[3] = -0;
+compactTransformFixture.vertices[0].normal[0] = 0.25;
+compactTransformFixture.vertices[0].color.set([0.25, 0.5, 0.75, 1]);
+compactTransformFixture.vertices[0].uv.set([0.125, 0.875, 0, 1]);
+compactTransformFixture.collisions.push({
+  vert: new Int32Array([0, 1, 2, 3, 4, 5, 6, 7]), mode: 4,
+});
+compactTransformFixture.lights.push(5);
+const compactTransformSRT = [1.25, 0.75, 1.5, 0.125, -0.25, 0.375, 2, -3, 4];
+const expandedTransformOracle = D.Mesh_Transform(compactTransformFixture.clone(), 0, compactTransformSRT);
+const compactTransformSource = compactTransformFixture.clone().compact();
+const sourcePositionBytes = Uint8Array.from(arrayBytes(compactTransformSource._compact.vertexPositions));
+const sourceSelectionBytes = Uint8Array.from(arrayBytes(compactTransformSource._compact.vertexBytes));
+const sharedVertexInts = compactTransformSource._compact.vertexInts;
+const sharedEdgeInts = compactTransformSource._compact.edgeInts;
+const sharedFaceInts = compactTransformSource._compact.faceInts;
+const sharedTransformDirections = compactTransformSource._compact.vertexDirections;
+const sharedTransformUVs = compactTransformSource._compact.vertexUVs;
+compactTransformSource.ensureExpanded = () => {
+  throw new Error('compact Transform expanded its source');
+};
+const compactTransformed = D.Mesh_Transform(compactTransformSource, 0, compactTransformSRT);
+assert.ok(compactTransformed._compact, 'compact Transform returns dormant storage');
+assert.notEqual(compactTransformed, compactTransformSource, 'compact Transform retains direct-call COW');
+assert.notEqual(compactTransformed._compact.vertexPositions.buffer,
+  compactTransformSource._compact.vertexPositions.buffer);
+assert.notEqual(compactTransformed._compact.vertexBytes.buffer,
+  compactTransformSource._compact.vertexBytes.buffer);
+assert.notEqual(compactTransformed._compact.edgeBytes.buffer,
+  compactTransformSource._compact.edgeBytes.buffer);
+assert.notEqual(compactTransformed._compact.faceBytes.buffer,
+  compactTransformSource._compact.faceBytes.buffer);
+assert.equal(compactTransformed._compact.vertexInts, sharedVertexInts);
+assert.equal(compactTransformed._compact.edgeInts, sharedEdgeInts);
+assert.equal(compactTransformed._compact.faceInts, sharedFaceInts);
+assert.equal(compactTransformed._compact.vertexDirections, sharedTransformDirections);
+assert.equal(compactTransformed._compact.vertexUVs, sharedTransformUVs);
+assert.deepEqual(arrayBytes(compactTransformSource._compact.vertexPositions), sourcePositionBytes,
+  'compact Transform leaves fork-source position bits unchanged');
+assert.deepEqual(arrayBytes(compactTransformSource._compact.vertexBytes), sourceSelectionBytes,
+  'compact Transform leaves fork-source selection bits unchanged');
+assertPreparedEquivalent(compactTransformed.prepare(), expandedTransformOracle.prepare(),
+  'compact mask-zero Transform');
+compactTransformed.ensureExpanded();
+for (let index = 0; index < compactTransformed.vertices.length; index++) {
+  assert.deepEqual(arrayBytes(compactTransformed.vertices[index].position),
+    arrayBytes(expandedTransformOracle.vertices[index].position), `compact Transform vertex ${index} bits`);
+}
+assert.ok(compactTransformed.vertices.every(vertex => vertex.select));
+assert.ok(compactTransformed.edges.every(edge => edge.select));
+assert.ok(compactTransformed.faces.every(face => face.select === (face.material !== 0)));
+assert.equal(compactTransformed.pivot, compactTransformFixture.pivot);
+assert.deepEqual(compactTransformed.lights, compactTransformFixture.lights);
+compactTransformed.collisions[0].vert[0] = 9;
+assert.equal(compactTransformSource.collisions[0].vert[0], 0,
+  'compact Transform metadata remains copy-on-write');
+
+const sharedPositionSource = cube.clone().compact();
+const sharedPositionBytes = Uint8Array.from(arrayBytes(sharedPositionSource._compact.vertexPositions));
+const sharedPositionBranch = D.Mesh_MatLink(sharedPositionSource, material, 0, 8);
+assert.equal(D.Mesh_Transform(sharedPositionBranch, 0,
+  [1, 1, 1, 0, 0, 0, 3, 0, 0], true), sharedPositionBranch);
+assert.deepEqual(arrayBytes(sharedPositionSource._compact.vertexPositions), sharedPositionBytes,
+  'owned compact Transform detaches a position buffer shared by an older branch');
+
+const sharedMaterialSource = cube.clone().compact();
+const sharedMaterialBytes = Uint8Array.from(arrayBytes(sharedMaterialSource._compact.faceInts));
+const sharedMaterialBranch = D.Mesh_Transform(sharedMaterialSource, 0,
+  [1, 1, 1, 0, 0, 0, 3, 0, 0]);
+assert.equal(D.Mesh_MatLink(sharedMaterialBranch, material, 0, 8, true), sharedMaterialBranch);
+assert.deepEqual(arrayBytes(sharedMaterialSource._compact.faceInts), sharedMaterialBytes,
+  'owned compact MatLink detaches face materials shared by an older Transform branch');
+
+const maskedCompactTransform = compactTransformFixture.clone().compact();
+let maskedTransformExpansions = 0;
+const expandMaskedTransform = maskedCompactTransform.ensureExpanded.bind(maskedCompactTransform);
+maskedCompactTransform.ensureExpanded = () => {
+  maskedTransformExpansions++;
+  return expandMaskedTransform();
+};
+D.Mesh_Transform(maskedCompactTransform, 1, compactTransformSRT);
+assert.ok(maskedTransformExpansions > 0, 'nonzero Transform masks retain the expanded selection path');
+
 const metadataA = cube.clone();
 metadataA.collisions.push({ vert: new Int32Array([0, 1, 2, 3, 4, 5, 6, 7]), mode: 1 });
 metadataA.lights.push(2);
@@ -658,6 +751,37 @@ const finalBranch = transformHandler(runtimeCall(finalConsumer, 2));
 assert.equal(finalBranch, runtimeSource, 'last graph consumer transfers cache identity');
 assert.equal(finalBranch.storageSummary().compact, true, 'terminal result returns to flat storage');
 assert.deepEqual(finalBranch.summary().bounds, {
+  min: [1.5, -0.5, -0.5], max: [2.5, 0.5, 0.5],
+});
+
+// Keep a separate runtime fixture dormant throughout both consumers so an
+// accidental dispatch expansion cannot be hidden by summary()/public getters.
+const compactSourceOp = { id: 1010, classId: 0x81, inputs: [], links: [] };
+const compactFirstConsumer = { id: 1011, classId: 0x88, inputs: [compactSourceOp], links: [] };
+const compactFinalConsumer = { id: 1012, classId: 0x88, inputs: [compactSourceOp], links: [] };
+const compactRuntime = {
+  operations: [compactSourceOp, compactFirstConsumer, compactFinalConsumer], roots: [], events: [],
+};
+const compactRuntimeSource = invoke(0x81, cubeParameters).compact();
+const compactRuntimeSourceBits = Uint8Array.from(arrayBytes(compactRuntimeSource._compact.vertexPositions));
+compactRuntimeSource.ensureExpanded = () => {
+  throw new Error('runtime compact Transform expanded its input');
+};
+const compactRuntimeCall = (op, x) => ({
+  runtime: compactRuntime, environment: {}, op, inputs: [compactRuntimeSource], links: [],
+  parameters: [0, 1, 1, 1, 0, 0, 0, x, 0, 0], strings: [], splines: [],
+});
+const compactFirstBranch = transformHandler(compactRuntimeCall(compactFirstConsumer, 1));
+assert.notEqual(compactFirstBranch, compactRuntimeSource);
+assert.ok(compactFirstBranch._compact);
+assert.deepEqual(arrayBytes(compactRuntimeSource._compact.vertexPositions), compactRuntimeSourceBits,
+  'first compact runtime branch leaves its source unchanged');
+const compactFinalBranch = transformHandler(compactRuntimeCall(compactFinalConsumer, 2));
+assert.equal(compactFinalBranch, compactRuntimeSource,
+  'final compact runtime consumer mutates the transferred cache identity');
+assert.ok(compactFinalBranch._compact);
+delete compactRuntimeSource.ensureExpanded;
+assert.deepEqual(compactFinalBranch.summary().bounds, {
   min: [1.5, -0.5, -0.5], max: [2.5, 0.5, 0.5],
 });
 

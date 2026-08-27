@@ -5,7 +5,9 @@ import { copyMeshForConversion, meshInputIsUniquelyConsumed } from './mesh.js';
 import { createMeshToMinHandler, meshToMin } from './minmesh.js';
 
 function Mesh_ToMin(mesh) {
-  const source = copyMeshForConversion(mesh);
+  // The direct converter is read-only over dormant flat storage. Preserve that
+  // representation instead of forcing the compatibility copy to expand it.
+  const source = mesh?.compactMeshConversionView?.() ? mesh : copyMeshForConversion(mesh);
   return source ? meshToMin(source) : null;
 }
 

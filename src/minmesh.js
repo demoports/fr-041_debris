@@ -3338,6 +3338,130 @@ function MinMesh_Pipe(spline, mesh0, mesh1, mesh2, flags, textureZoom, ringDista
   return output.mergeClusters();
 }
 
+function meshToMinCompact(result, view, oldMeshHasColor, oldMeshHasUV0, oldMeshHasUV1,
+  packOldColorComponents) {
+  const storage = view.storage;
+  const vertexMap = new Int32Array(storage.vertexCount);
+  vertexMap.fill(-1);
+
+  const physicalVertex = oldIndex => {
+    const first = storage.vertexInts[oldIndex * 5 + 1];
+    return first >= 0 && first < storage.vertexCount ? first : oldIndex;
+  };
+  const addOldVertex = oldIndex => {
+    const mapped = vertexMap[oldIndex];
+    if (mapped >= 0) return mapped;
+    const vertex = makeVertex();
+    const positionOffset = physicalVertex(oldIndex) * 4;
+    vertex.position[0] = f32(storage.vertexPositions[positionOffset]);
+    vertex.position[1] = f32(storage.vertexPositions[positionOffset + 1]);
+    vertex.position[2] = f32(storage.vertexPositions[positionOffset + 2]);
+    const attributeOffset = oldIndex * 4;
+    if (oldMeshHasUV0 && storage.vertexUVs) {
+      vertex.uv[0][0] = storage.vertexUVs[attributeOffset];
+      vertex.uv[0][1] = storage.vertexUVs[attributeOffset + 1];
+    }
+    if (oldMeshHasUV1 && storage.vertexUV1s) {
+      vertex.uv[1][0] = storage.vertexUV1s[attributeOffset];
+      vertex.uv[1][1] = storage.vertexUV1s[attributeOffset + 1];
+    }
+    const colors = storage.vertexColors;
+    vertex.color = oldMeshHasColor
+      ? packOldColorComponents(
+        colors ? colors[attributeOffset] : 0,
+        colors ? colors[attributeOffset + 1] : 0,
+        colors ? colors[attributeOffset + 2] : 0,
+        colors ? colors[attributeOffset + 3] : 0,
+      )
+      : 0xffffffff;
+    const index = result.vertices.push(vertex) - 1;
+    vertexMap[oldIndex] = index;
+    return index;
+  };
+
+  const addCentroid = oldIndices => {
+    const position = new Float32Array(3);
+    const color = new Float32Array(4);
+    const uv = new Float32Array(2);
+    const uv1 = new Float32Array(2);
+    const inverse = f32(1 / oldIndices.length);
+    for (const oldIndex of oldIndices) {
+      const positionOffset = physicalVertex(oldIndex) * 4;
+      for (let component = 0; component < 3; component++) {
+        position[component] = f32(
+          position[component] + storage.vertexPositions[positionOffset + component] * inverse,
+        );
+      }
+      const attributeOffset = oldIndex * 4;
+      if (storage.vertexColors) {
+        for (let component = 0; component < 4; component++) {
+          color[component] = f32(
+            color[component] + storage.vertexColors[attributeOffset + component] * inverse,
+          );
+        }
+      }
+      if (oldMeshHasUV0 && storage.vertexUVs) {
+        for (let component = 0; component < 2; component++) {
+          uv[component] = f32(uv[component] + storage.vertexUVs[attributeOffset + component] * inverse);
+        }
+      }
+      if (oldMeshHasUV1 && storage.vertexUV1s) {
+        for (let component = 0; component < 2; component++) {
+          uv1[component] = f32(
+            uv1[component] + storage.vertexUV1s[attributeOffset + component] * inverse,
+          );
+        }
+      }
+    }
+    const vertex = makeVertex();
+    copy3(vertex.position, position);
+    vertex.color = oldMeshHasColor
+      ? packOldColorComponents(color[0], color[1], color[2], color[3])
+      : 0xffffffff;
+    if (oldMeshHasUV0) vertex.uv[0].set(uv);
+    if (oldMeshHasUV1) vertex.uv[1].set(uv1);
+    const index = result.vertices.length;
+    result.vertices.push(vertex);
+    return index;
+  };
+
+  for (let faceIndex = 0; faceIndex < storage.faceCount; faceIndex++) {
+    const material = storage.faceInts[faceIndex * 5] | 0;
+    if (!material) continue;
+    const start = storage.faceInts[faceIndex * 5 + 1];
+    const oldIndices = [];
+    if (start >= 0) {
+      let halfedge = start;
+      const limit = storage.edgeCount * 2 + 1;
+      do {
+        const edgeOffset = (halfedge >> 1) * 11;
+        const side = halfedge & 1;
+        oldIndices.push(storage.edgeInts[edgeOffset + 6 + side]);
+        halfedge = storage.edgeInts[edgeOffset + side];
+        if (oldIndices.length > limit) throw new Error('broken GenMesh face loop');
+      } while (halfedge !== start);
+    }
+    if (oldIndices.length < 3) continue;
+    const vertices = oldIndices.map(addOldVertex);
+    const used = storage.faceBytes[faceIndex * 4 + 3] !== 0;
+    if (vertices.length >= 8) {
+      const centroid = addCentroid(oldIndices);
+      for (let index = 0; index < vertices.length; index++) {
+        const converted = makeFace([
+          centroid, vertices[index], vertices[(index + 1) % vertices.length],
+        ], material);
+        converted.flags = used ? 0 : 1;
+        result.faces.push(converted);
+      }
+    } else {
+      const converted = makeFace(vertices, material);
+      converted.flags = used ? 0 : 1;
+      result.faces.push(converted);
+    }
+  }
+  return result.invalidate();
+}
+
 function meshToMin(source) {
   if (!source) return null;
   if (source instanceof MinMesh) return source.clone();
@@ -3348,21 +3472,28 @@ function meshToMin(source) {
     if (!result.clusters.length || result.clusters[0].material) result.clusters.unshift(makeCluster(null));
     result.Clusters = result.clusters;
   }
-  const oldVertices = source.vertices || source.Vert || [];
   // Mesh_ToMin uses white only when COLOR0 is absent from the old mesh's
   // vertex format. A present sVector is packed with GetColor(), including the
   // all-zero default created by GenMesh::Init. Treating that zero vector as a
   // missing color turns Material11's `Color0 SET + Vertex ADD` base phase
   // white before any lighting (most visibly on Debris' instanced particles).
   const oldMeshHasColor = source.vertexMask === undefined || Boolean(source.vertexMask & (1 << 3));
+  const oldMeshHasUV0 = source.vertexMask === undefined || Boolean(source.vertexMask & (1 << 5));
   const oldMeshHasUV1 = source.vertexMask === undefined || Boolean(source.vertexMask & (1 << 6));
+  const byte = component => Math.max(0, Math.min(255, Math.trunc(Number(component) * 255)));
+  const packOldColorComponents = (red, green, blue, alpha) =>
+    ((byte(alpha) << 24) | (byte(red) << 16) | (byte(green) << 8) | byte(blue)) >>> 0;
   const packOldColor = value => {
     if (typeof value === 'number') return value >>> 0;
     if (!oldMeshHasColor || !value || value.length < 4) return 0xffffffff;
-    const byte = component => Math.max(0, Math.min(255, Math.trunc(Number(component) * 255)));
-    return ((byte(value[3]) << 24) | (byte(value[0]) << 16) |
-      (byte(value[1]) << 8) | byte(value[2])) >>> 0;
+    return packOldColorComponents(value[0], value[1], value[2], value[3]);
   };
+  const compactView = source.compactMeshConversionView?.();
+  if (compactView) {
+    return meshToMinCompact(result, compactView, oldMeshHasColor, oldMeshHasUV0,
+      oldMeshHasUV1, packOldColorComponents);
+  }
+  const oldVertices = source.vertices || source.Vert || [];
   const vertexMap = new Map();
   const addOldVertex = oldIndex => {
     if (vertexMap.has(oldIndex)) return vertexMap.get(oldIndex);
@@ -3372,7 +3503,7 @@ function meshToMin(source) {
     const uv = old?.uv || old?.values?.[4] || [0, 0];
     const uv1 = old?.uv1 || old?.values?.[5] || [0, 0];
     copy3(vertex.position, position);
-    vertex.uv[0].set(uv.subarray ? uv.subarray(0, 2) : uv.slice(0, 2));
+    if (oldMeshHasUV0) vertex.uv[0].set(uv.subarray ? uv.subarray(0, 2) : uv.slice(0, 2));
     if (oldMeshHasUV1) vertex.uv[1].set(uv1.subarray ? uv1.subarray(0, 2) : uv1.slice(0, 2));
     vertex.color = packOldColor(old?.color);
     const index = result.vertices.push(vertex) - 1; vertexMap.set(oldIndex, index); return index;
@@ -3411,7 +3542,7 @@ function meshToMin(source) {
       const vertex = makeVertex();
       copy3(vertex.position, synthetic.position);
       vertex.color = packOldColor(synthetic.color);
-      vertex.uv[0].set(synthetic.uv.subarray(0, 2));
+      if (oldMeshHasUV0) vertex.uv[0].set(synthetic.uv.subarray(0, 2));
       if (oldMeshHasUV1) vertex.uv[1].set(synthetic.uv1.subarray(0, 2));
       result.vertices.push(vertex);
       return index;
