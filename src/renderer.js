@@ -4494,20 +4494,24 @@ class Renderer {
       gl.stencilOpSeparate(gl.BACK, gl.KEEP, gl.KEEP, gl.DECR_WRAP);
     }
 
+    let topologyUploaded = false;
     for (let offset = 0; offset < instanceMatrices.length; offset += 16) {
       const model = instanceMatrices.subarray(offset, offset + 16);
       const volume = buildShadowVolume(
         item.geometry, topology, item.light, model, useZFail, this.shadowVolumeScratch);
       if (!volume.indices.length) continue;
       gl.uniform3fv(uniforms.uLightPosition, volume.lightPosition);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowPositionBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, volume.positions, gl.DYNAMIC_DRAW);
-      gl.enableVertexAttribArray(0);
-      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowExtrusionBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, volume.extrusions, gl.DYNAMIC_DRAW);
-      gl.enableVertexAttribArray(1);
-      gl.vertexAttribPointer(1, 1, gl.UNSIGNED_BYTE, false, 0, 0);
+      if (!topologyUploaded) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowPositionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, topology.volumePositions, gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowExtrusionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, topology.extrusions, gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(1);
+        gl.vertexAttribPointer(1, 1, gl.UNSIGNED_BYTE, false, 0, 0);
+        topologyUploaded = true;
+      }
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.shadowIndexBuffer);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, volume.indices, gl.DYNAMIC_DRAW);
       gl.uniformMatrix4fv(uniforms.uModel, false, model);

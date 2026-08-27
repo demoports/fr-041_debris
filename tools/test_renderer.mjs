@@ -2712,6 +2712,89 @@ D.Renderer.prototype.drawShadowItem.call(scratchDrawRenderer, {
 }, { viewProjection: identity });
 assert.equal(rendererShadowScratch.lightPosition.buffer, rendererLightBuffer);
 
+// Shadow topology vertices and extrusion flags are identical for every
+// instance in one paint job. Upload and configure them once, while preserving
+// the per-instance light/model constants and silhouette index streams.
+{
+  const shadowPositionBuffer = { name: 'positions' };
+  const shadowExtrusionBuffer = { name: 'extrusions' };
+  const shadowIndexBuffer = { name: 'indices' };
+  const uploads = [], pointers = [], enabledAttributes = [];
+  const shadowDraws = [], lightUploads = [], matrixUploads = [];
+  let boundBuffer = null;
+  const shadowUploadGL = {
+    ...scratchDrawGL,
+    bindBuffer(_target, buffer) { boundBuffer = buffer; },
+    bufferData(target, value) {
+      uploads.push({ buffer: boundBuffer, target, value, length: value.length });
+    },
+    enableVertexAttribArray(location) { enabledAttributes.push(location); },
+    vertexAttribPointer(location, size, type, normalized, stride, offset) {
+      pointers.push({ location, size, type, normalized, stride, offset });
+    },
+    uniform3fv(location, value) {
+      lightUploads.push({ location, value: Array.from(value) });
+    },
+    uniformMatrix4fv(location, transpose, value) {
+      matrixUploads.push({ location, transpose, value: Array.from(value) });
+    },
+    drawElements(mode, count, type, offset) {
+      shadowDraws.push({ mode, count, type, offset });
+    },
+  };
+  const repeatedMatrices = new Float32Array(3 * 16);
+  for (let instance = 0; instance < 3; instance++) {
+    repeatedMatrices.set(identity, instance * 16);
+  }
+  const multiShadowRenderer = {
+    gl: shadowUploadGL,
+    shadowUniforms: { uViewProjection: 'viewProjection', uLightPosition: 'light', uModel: 'model' },
+    shadowProgram: {}, shadowVAO: {}, shadowPositionBuffer,
+    shadowExtrusionBuffer, shadowIndexBuffer, shadowVolumeScratch: {},
+    drawCalls: 0, triangles: 0, instanceMatrices: () => repeatedMatrices,
+  };
+  D.Renderer.prototype.drawShadowItem.call(multiShadowRenderer, {
+    light: { position: [0.5, 0.5, -1] }, groups: shadowGeometry.groups,
+    geometry: scratchDrawGeometry, job: {},
+  }, { viewProjection: identity });
+  assert.equal(uploads.length, 5);
+  assert.equal(uploads.filter(upload => upload.buffer === shadowPositionBuffer).length, 1);
+  assert.equal(uploads.filter(upload => upload.buffer === shadowExtrusionBuffer).length, 1);
+  assert.equal(uploads.filter(upload => upload.buffer === shadowIndexBuffer).length, 3);
+  assert.equal(uploads.find(upload => upload.buffer === shadowPositionBuffer).value,
+    scratchTopology.volumePositions);
+  assert.equal(uploads.find(upload => upload.buffer === shadowExtrusionBuffer).value,
+    scratchTopology.extrusions);
+  assert.deepEqual(enabledAttributes, [0, 1]);
+  assert.deepEqual(pointers.map(pointer => pointer.location), [0, 1]);
+  assert.equal(lightUploads.length, 3);
+  assert.equal(matrixUploads.filter(upload => upload.location === 'model').length, 3);
+  assert.deepEqual(shadowDraws.map(draw => draw.count), [30, 30, 30]);
+  assert.equal(multiShadowRenderer.drawCalls, 3);
+  assert.equal(multiShadowRenderer.triangles, 30);
+
+  // A capless volume viewed from its fully front-facing side emits no
+  // silhouette indices. The lazy topology setup must remain untouched when
+  // every instance is empty.
+  uploads.length = 0; pointers.length = 0; enabledAttributes.length = 0;
+  shadowDraws.length = 0; lightUploads.length = 0; matrixUploads.length = 0;
+  const emptyShadowRenderer = {
+    ...multiShadowRenderer, shadowVolumeScratch: {}, drawCalls: 0, triangles: 0,
+  };
+  D.Renderer.prototype.drawShadowItem.call(emptyShadowRenderer, {
+    light: { position: [0.5, 0.5, 1] }, groups: shadowGeometry.groups,
+    geometry: scratchDrawGeometry, job: {}, shadowZFail: false,
+  }, { viewProjection: identity });
+  assert.equal(uploads.length, 0);
+  assert.deepEqual(enabledAttributes, []);
+  assert.deepEqual(pointers, []);
+  assert.equal(lightUploads.length, 0);
+  assert.equal(matrixUploads.filter(upload => upload.location === 'model').length, 0);
+  assert.deepEqual(shadowDraws, []);
+  assert.equal(emptyShadowRenderer.drawCalls, 0);
+  assert.equal(emptyShadowRenderer.triangles, 0);
+}
+
 // Engine_::RenderPaintJobs transforms a shadow light with the released
 // transpose-only sMatrix::TransR, and material11.vsh subtracts that c4 value
 // in object space before Model. A mathematically correct world-space
