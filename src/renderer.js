@@ -4729,7 +4729,7 @@ class Renderer {
     const colors = scratch.lightColors;
     const lightSpecular = scratch.lightSpecular;
     const lights = selectedLights ?? selectActiveLights(viewport);
-    for (let index = 0; index < lights.length; index++) {
+    if (mode === 2) for (let index = 0; index < lights.length; index++) {
       const light = lights[index], offset = index * 4;
       if (light.kind === 'directional') {
         // material11.vsh consumes EngLight::Direction directly as the
@@ -4786,10 +4786,13 @@ class Renderer {
         m11LightConstant);
     }
     gl.uniform1i(uniforms.uLightCount, lights.length);
-    gl.uniform4fv(uniforms['uLightPosition[0]'], positions);
-    gl.uniform4fv(uniforms['uLightAttenuation[0]'], attenuationCenters);
-    gl.uniform4fv(uniforms['uLightColor[0]'], colors);
-    gl.uniform1fv(uniforms['uLightSpecular[0]'], lightSpecular);
+    if (mode === 2 && lights.length) {
+      const vectorLength = lights.length * 4;
+      gl.uniform4fv(uniforms['uLightPosition[0]'], positions, 0, vectorLength);
+      gl.uniform4fv(uniforms['uLightAttenuation[0]'], attenuationCenters, 0, vectorLength);
+      gl.uniform4fv(uniforms['uLightColor[0]'], colors, 0, vectorLength);
+      gl.uniform1fv(uniforms['uLightSpecular[0]'], lightSpecular, 0, lights.length);
+    }
     gl.uniform4fv(uniforms.uM11LightConstant, m11LightConstant);
   }
 

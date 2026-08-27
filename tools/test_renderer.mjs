@@ -603,16 +603,41 @@ assert.equal(insertTracker.finish(), 'add-destination-alpha',
 
 const materialUniformCalls = {
   oneI: new Map(), oneF: new Map(), three: new Map(), four: new Map(), oneFV: new Map(),
-  matrixFour: new Map(),
+  matrixFour: new Map(), lightArrayCalls: 0, lightArrayFloats: 0,
 };
+const lightArrayUniforms = new Set([
+  'uLightPosition[0]', 'uLightAttenuation[0]', 'uLightColor[0]', 'uLightSpecular[0]',
+]);
+function materialUniformSlice(value, sourceOffset = 0,
+    sourceLength = value.length - sourceOffset) {
+  return Array.from(value).slice(sourceOffset, sourceOffset + sourceLength);
+}
+function recordMaterialUniform(map, location, value, sourceOffset, sourceLength) {
+  const uploaded = materialUniformSlice(value, sourceOffset, sourceLength);
+  map.set(location, uploaded);
+  if (lightArrayUniforms.has(location)) {
+    materialUniformCalls.lightArrayCalls++;
+    materialUniformCalls.lightArrayFloats += uploaded.length;
+  }
+}
+function resetMaterialLightUploads() {
+  materialUniformCalls.lightArrayCalls = 0;
+  materialUniformCalls.lightArrayFloats = 0;
+}
 const materialBindGL = {
   TEXTURE4: 4, TEXTURE_2D: 3553,
   uniform1i(location, value) { materialUniformCalls.oneI.set(location, value); },
   uniform1f(location, value) { materialUniformCalls.oneF.set(location, value); },
-  uniform1fv(location, value) { materialUniformCalls.oneFV.set(location, Array.from(value)); },
+  uniform1fv(location, value, sourceOffset, sourceLength) {
+    recordMaterialUniform(materialUniformCalls.oneFV,
+      location, value, sourceOffset, sourceLength);
+  },
   uniform3fv(location, value) { materialUniformCalls.three.set(location, Array.from(value)); },
   uniform3f(location, x, y, z) { materialUniformCalls.three.set(location, [x, y, z]); },
-  uniform4fv(location, value) { materialUniformCalls.four.set(location, Array.from(value)); },
+  uniform4fv(location, value, sourceOffset, sourceLength) {
+    recordMaterialUniform(materialUniformCalls.four,
+      location, value, sourceOffset, sourceLength);
+  },
   uniformMatrix4fv(location, transpose, value) {
     assert.equal(transpose, false);
     materialUniformCalls.matrixFour.set(location, Array.from(value));
@@ -670,12 +695,23 @@ const materialBindingRenderer = {
   textures: { bind() {}, fallbackTexture: () => 'white' },
   currentPrelightTexture: null,
 };
+resetMaterialLightUploads();
 D.Renderer.prototype.bindMaterial.call(materialBindingRenderer, signedBindView, {
   ambientLight: 0xff000000,
   camera: { cameraSpace: materialCameraSpace, fogColor: 0xff000000, fogStart: 0, fogEnd: 100 },
 }, { view: identity }, [{
   kind: 'point', position: [11, 22, 33], range: 10, amplify: 2, color: 0x80ffffff,
 }], legacyModel);
+assert.equal(materialUniformCalls.lightArrayCalls, 4,
+  'a light pass uploads exactly the four active-light arrays');
+assert.equal(materialUniformCalls.lightArrayFloats, 13,
+  'one active light uploads 13 floats instead of all 208 scratch floats');
+assert.equal(materialScratch.lightPositions.length + materialScratch.lightAttenuation.length +
+  materialScratch.lightColors.length + materialScratch.lightSpecular.length, 208);
+assert.equal(materialUniformCalls.four.get('uLightPosition[0]').length, 4);
+assert.equal(materialUniformCalls.four.get('uLightAttenuation[0]').length, 4);
+assert.equal(materialUniformCalls.four.get('uLightColor[0]').length, 4);
+assert.equal(materialUniformCalls.oneFV.get('uLightSpecular[0]').length, 1);
 assert.equal(materialUniformCalls.oneI.get('uM11MultipassLight'), 1);
 assert.equal(materialUniformCalls.oneI.has('uSignedTextureMask'), false,
   'signed normalization is texture storage semantics, not a shader mask');
@@ -1027,12 +1063,21 @@ assert.deepEqual(materialUniformCalls.four.get('uLightAttenuation[0]').slice(0, 
 assert.ok(Math.abs(materialUniformCalls.four.get('uLightAttenuation[0]')[3] - 1 / 4096) < 1e-12);
 const material20AmbientView = D.materialView(material20,
   { usage: 'ambient', state: 'material20-ambient' });
+resetMaterialLightUploads();
 D.Renderer.prototype.bindMaterial.call(materialBindingRenderer, material20AmbientView, {
   ambientLight: 0x00102030,
   camera: { cameraSpace: materialCameraSpace, fogColor: 0xff000000,
     fogStart: 0, fogEnd: 100 },
-}, { view: identity }, [], legacyModel);
+}, { view: identity }, [{
+  kind: 'point', position: [11, 22, 33], range: 10, amplify: 1,
+  color: 0xffffffff,
+}], legacyModel);
 assert.equal(materialUniformCalls.oneI.get('uMode'), 5);
+assert.equal(materialUniformCalls.oneI.get('uLightCount'), 1,
+  'non-light passes preserve the selected-light count uniform');
+assert.equal(materialUniformCalls.lightArrayCalls, 0,
+  'non-light passes do not upload any light arrays');
+assert.equal(materialUniformCalls.lightArrayFloats, 0);
 assert.deepEqual(materialUniformCalls.three.get('uAmbient'),
   Array.from(D.colorRGB(0x00102030)),
   'Material20 AMBIENT consumes the viewport-owned Scene_Ambient snapshot');
