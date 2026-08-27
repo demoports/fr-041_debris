@@ -226,14 +226,15 @@ function cross3(a, b, out = new Float32Array(3)) {
   return out;
 }
 
-function initDirection(direction, out = new Float32Array(16)) {
-  const k = normalize3(direction);
-  const i = normalize3(cross3([0, 1, 0], k));
-  const j = cross3(k, i);
-  out.set([i[0], i[1], i[2], 0], 0);
-  out.set([j[0], j[1], j[2], 0], 4);
-  out.set([k[0], k[1], k[2], 0], 8);
-  out.set([0, 0, 0, 1], 12);
+function initDirection(direction, out = new Float32Array(16), scratch = null) {
+  const k = normalize3(direction, scratch?.k);
+  const i = cross3(scratch?.up || [0, 1, 0], k, scratch?.i);
+  normalize3(i, i);
+  const j = cross3(k, i, scratch?.j);
+  out[0] = i[0]; out[1] = i[1]; out[2] = i[2]; out[3] = 0;
+  out[4] = j[0]; out[5] = j[1]; out[6] = j[2]; out[7] = 0;
+  out[8] = k[0]; out[9] = k[1]; out[10] = k[2]; out[11] = 0;
+  out[12] = out[13] = out[14] = 0; out[15] = 1;
   return out;
 }
 
@@ -304,8 +305,7 @@ function quaternionToMatrix(quaternion, out = new Float32Array(16)) {
   return out;
 }
 
-function quaternionLerp(a, b, time) {
-  const out = new Float32Array(4);
+function quaternionLerp(a, b, time, out = new Float32Array(4)) {
   const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
   const sign = dot < 0 ? -1 : 1;
   for (let i = 0; i < 4; i++) out[i] = f32(a[i] + (sign * b[i] - a[i]) * time);
@@ -497,7 +497,39 @@ class Spline {
   }
 }
 
-function hermite(p0, p1, p2, p3, fade, tension, continuity, bias, ignoreTime, derivative = false) {
+const BLOB_SPLINE_FIELDS = Object.freeze(['px', 'py', 'pz', 'rx', 'ry', 'rz', 'zoom']);
+
+function createBlobSplineEvalScratch() {
+  return {
+    segment: { p0: null, p1: null, p2: null, p3: null, fade: 0 },
+    hermite: {
+      factors: [0, 0, 0, 0],
+      derivatives: [0, 0, 0, 0],
+      value: new Float32Array(BLOB_SPLINE_FIELDS.length),
+      derivative: new Float32Array(BLOB_SPLINE_FIELDS.length),
+    },
+    direction: [0, 0, 0],
+    directionBasis: {
+      up: [0, 1, 0],
+      k: new Float32Array(3),
+      i: new Float32Array(3),
+      j: new Float32Array(3),
+    },
+    mx: new Float32Array(16),
+    my: new Float32Array(16),
+    mz: new Float32Array(16),
+    rotation: new Float32Array(16),
+    q1: new Float32Array(4),
+    q2: new Float32Array(4),
+    quaternion: new Float32Array(4),
+    m1: new Float32Array(16),
+    m2: new Float32Array(16),
+    result: { matrix: null, zoom: 1 },
+  };
+}
+
+function hermite(p0, p1, p2, p3, fade, tension, continuity, bias, ignoreTime,
+    derivative = false, scratch = null) {
   fade = f32(fade); tension = f32(tension); continuity = f32(continuity); bias = f32(bias);
   const oneMinusTension = subF(1, tension);
   let a1 = mulF(mulF(oneMinusTension, subF(1, continuity)), addF(1, bias));
@@ -516,18 +548,16 @@ function hermite(p0, p1, p2, p3, fade, tension, continuity, bias, ignoreTime, de
   const twoFade3 = mulF(twoFade2, fade);
   const threeFade2 = mulF(mulF(3, fade), fade);
   const sixFade2 = mulF(mulF(6, fade), fade);
-  const factors = [
-    addF(subF(twoFade3, threeFade2), 1),
-    addF(-twoFade3, threeFade2),
-    addF(subF(fff, twoFade2), fade),
-    subF(fff, ff),
-  ];
-  const derivatives = [
-    subF(sixFade2, mulF(6, fade)),
-    addF(-sixFade2, mulF(6, fade)),
-    addF(subF(threeFade2, mulF(4, fade)), 1),
-    subF(threeFade2, mulF(2, fade)),
-  ];
+  const factors = scratch?.factors || [0, 0, 0, 0];
+  factors[0] = addF(subF(twoFade3, threeFade2), 1);
+  factors[1] = addF(-twoFade3, threeFade2);
+  factors[2] = addF(subF(fff, twoFade2), fade);
+  factors[3] = subF(fff, ff);
+  const derivatives = scratch?.derivatives || [0, 0, 0, 0];
+  derivatives[0] = subF(sixFade2, mulF(6, fade));
+  derivatives[1] = addF(-sixFade2, mulF(6, fade));
+  derivatives[2] = addF(subF(threeFade2, mulF(4, fade)), 1);
+  derivatives[3] = subF(threeFade2, mulF(2, fade));
   if (!ignoreTime) {
     t0 = subF(t1, t0); t1 = subF(t2, t1); t2 = subF(t3, t2);
     factors[2] = divF(mulF(factors[2], t1), addF(t1, t0));
@@ -540,23 +570,27 @@ function hermite(p0, p1, p2, p3, fade, tension, continuity, bias, ignoreTime, de
   }
   for (let i = 0; i < 4; i++) derivatives[i] = mulF(derivatives[i], 0.25);
 
-  const fields = ['px', 'py', 'pz', 'rx', 'ry', 'rz', 'zoom'];
-  const value = {}, delta = {};
-  for (const field of fields) {
+  const value = scratch?.value || {}, delta = scratch?.derivative || {};
+  for (let fieldIndex = 0; fieldIndex < BLOB_SPLINE_FIELDS.length; fieldIndex++) {
+    const field = BLOB_SPLINE_FIELDS[fieldIndex];
     const tangent1 = addF(mulF(a1, subF(p1[field], p0[field])),
       mulF(b1, subF(p2[field], p1[field])));
     const tangent2 = addF(mulF(a2, subF(p2[field], p1[field])),
       mulF(b2, subF(p3[field], p2[field])));
-    value[field] = addF(addF(addF(mulF(factors[0], p1[field]),
+    const fieldValue = addF(addF(addF(mulF(factors[0], p1[field]),
       mulF(factors[1], p2[field])), mulF(factors[2], tangent1)),
     mulF(factors[3], tangent2));
+    if (scratch) value[fieldIndex] = fieldValue;
+    else value[field] = fieldValue;
     if (derivative) {
-      delta[field] = addF(addF(addF(mulF(derivatives[0], p1[field]),
+      const fieldDerivative = addF(addF(addF(mulF(derivatives[0], p1[field]),
         mulF(derivatives[1], p2[field])), mulF(derivatives[2], tangent1)),
       mulF(derivatives[3], tangent2));
+      if (scratch) delta[fieldIndex] = fieldDerivative;
+      else delta[field] = fieldDerivative;
     }
   }
-  return { value, derivative: delta };
+  return scratch || { value, derivative: delta };
 }
 
 class BlobSplinePath {
@@ -618,7 +652,7 @@ class BlobSplinePath {
 
   get blobSpline() { return this; }
 
-  _segment(time) {
+  _segment(time, out = null) {
     if (this.keys.length < 2) throw new Error('Spline needs at least two keys');
     let index;
     if (time <= this.keys[0].time) { index = 1; time = 0; }
@@ -631,13 +665,31 @@ class BlobSplinePath {
     const p1 = this.keys[index - 1], p2 = this.keys[index];
     const fade = p2.time === p1.time ? p2.time
       : divF(subF(f32(time), p1.time), subF(p2.time, p1.time));
-    return { p0: index >= 2 ? this.keys[index - 2] : null, p1, p2,
-      p3: index + 1 < this.keys.length ? this.keys[index + 1] : null, fade };
+    const result = out || {};
+    result.p0 = index >= 2 ? this.keys[index - 2] : null;
+    result.p1 = p1;
+    result.p2 = p2;
+    result.p3 = index + 1 < this.keys.length ? this.keys[index + 1] : null;
+    result.fade = fade;
+    return result;
+  }
+
+  createEvalScratch() {
+    return createBlobSplineEvalScratch();
   }
 
   eval(time, phase = 0, matrix = new Float32Array(16)) {
+    return this._eval(time, phase, matrix, null);
+  }
+
+  evalInto(time, phase = 0, matrix = new Float32Array(16),
+      scratch = this.createEvalScratch()) {
+    return this._eval(time, phase, matrix, scratch);
+  }
+
+  _eval(time, phase, matrix, scratch) {
     void phase;
-    const segment = this._segment(time);
+    const segment = this._segment(time, scratch?.segment);
     let key, keyDerivative = null;
     if (this.mode === 4) {
       const t = f32(segment.fade);
@@ -646,11 +698,16 @@ class BlobSplinePath {
       const f2 = addF(mulF(-2, ttt), mulF(3, tt));
       const f3 = mulF(addF(subF(ttt, mulF(2, tt)), t), subF(1, this.tension));
       const f4 = mulF(subF(ttt, tt), subF(1, this.tension));
-      const q1 = new Float32Array([segment.p1.zoom, segment.p1.rx, segment.p1.ry, segment.p1.rz]);
-      const q2 = new Float32Array([segment.p2.zoom, segment.p2.rx, segment.p2.ry, segment.p2.rz]);
-      const quaternion = quaternionLerp(q1, q2, t);
+      const q1 = scratch?.q1 || new Float32Array(4);
+      const q2 = scratch?.q2 || new Float32Array(4);
+      q1[0] = segment.p1.zoom; q1[1] = segment.p1.rx;
+      q1[2] = segment.p1.ry; q1[3] = segment.p1.rz;
+      q2[0] = segment.p2.zoom; q2[1] = segment.p2.rx;
+      q2[2] = segment.p2.ry; q2[3] = segment.p2.rz;
+      const quaternion = quaternionLerp(q1, q2, t, scratch?.quaternion);
       quaternionToMatrix(quaternion, matrix);
-      const m1 = quaternionToMatrix(q1), m2 = quaternionToMatrix(q2);
+      const m1 = quaternionToMatrix(q1, scratch?.m1);
+      const m2 = quaternionToMatrix(q2, scratch?.m2);
       matrix[12] = addF(addF(addF(mulF(segment.p1.px, f1), mulF(segment.p2.px, f2)),
         mulF(m1[8], f3)), mulF(m2[8], f4));
       matrix[13] = addF(addF(addF(mulF(segment.p1.py, f1), mulF(segment.p2.py, f2)),
@@ -658,34 +715,62 @@ class BlobSplinePath {
       matrix[14] = addF(addF(addF(mulF(segment.p1.pz, f1), mulF(segment.p2.pz, f2)),
         mulF(m1[10], f3)), mulF(m2[10], f4));
       matrix[15] = 1;
-      return { matrix, zoom: 1 };
+      const result = scratch?.result || {};
+      result.matrix = matrix; result.zoom = 1;
+      return result;
     }
     const interpolated = hermite(segment.p0, segment.p1, segment.p2, segment.p3,
-      segment.fade, this.tension, this.continuity, 0, Boolean(this.uniform), this.mode === 3);
+      segment.fade, this.tension, this.continuity, 0, Boolean(this.uniform),
+      this.mode === 3, scratch?.hermite);
     key = interpolated.value; keyDerivative = interpolated.derivative;
+    const px = scratch ? key[0] : key.px;
+    const py = scratch ? key[1] : key.py;
+    const pz = scratch ? key[2] : key.pz;
+    const rx = scratch ? key[3] : key.rx;
+    const ry = scratch ? key[4] : key.ry;
+    const rz = scratch ? key[5] : key.rz;
+    const zoom = scratch ? key[6] : key.zoom;
     switch (this.mode) {
-      case 1:
-        initDirection([this.target[0] - key.px, this.target[1] - key.py, this.target[2] - key.pz], matrix);
+      case 1: {
+        const direction = scratch?.direction || [0, 0, 0];
+        direction[0] = this.target[0] - px;
+        direction[1] = this.target[1] - py;
+        direction[2] = this.target[2] - pz;
+        initDirection(direction, matrix, scratch?.directionBasis);
         break;
-      case 2:
-        initDirection([key.rx - key.px, key.ry - key.py, key.rz - key.pz], matrix);
+      }
+      case 2: {
+        const direction = scratch?.direction || [0, 0, 0];
+        direction[0] = rx - px;
+        direction[1] = ry - py;
+        direction[2] = rz - pz;
+        initDirection(direction, matrix, scratch?.directionBasis);
         break;
-      case 3:
-        initDirection([keyDerivative.px, keyDerivative.py, keyDerivative.pz], matrix);
+      }
+      case 3: {
+        const direction = scratch?.direction || [0, 0, 0];
+        direction[0] = scratch ? keyDerivative[0] : keyDerivative.px;
+        direction[1] = scratch ? keyDerivative[1] : keyDerivative.py;
+        direction[2] = scratch ? keyDerivative[2] : keyDerivative.pz;
+        initDirection(direction, matrix, scratch?.directionBasis);
         break;
+      }
       case 5: {
-        const mx = initEuler(key.rx * TWO_PI, 0, 0);
-        const my = initEuler(0, key.ry * TWO_PI, 0);
-        const mz = initEuler(0, 0, key.rz * TWO_PI);
-        mulRotation(mulRotation(mz, mx), my, matrix);
+        const mx = initEuler(rx * TWO_PI, 0, 0, scratch?.mx);
+        const my = initEuler(0, ry * TWO_PI, 0, scratch?.my);
+        const mz = initEuler(0, 0, rz * TWO_PI, scratch?.mz);
+        const rotation = mulRotation(mz, mx, scratch?.rotation);
+        mulRotation(rotation, my, matrix);
         break;
       }
       default:
-        initEulerTurns(key.rx, key.ry, key.rz, matrix);
+        initEulerTurns(rx, ry, rz, matrix);
         break;
     }
-    matrix[12] = key.px; matrix[13] = key.py; matrix[14] = key.pz; matrix[15] = 1;
-    return { matrix, zoom: key.zoom };
+    matrix[12] = px; matrix[13] = py; matrix[14] = pz; matrix[15] = 1;
+    const result = scratch?.result || {};
+    result.matrix = matrix; result.zoom = zoom;
+    return result;
   }
 
   evaluate(time, phase, matrix) { return this.eval(time, phase, matrix); }

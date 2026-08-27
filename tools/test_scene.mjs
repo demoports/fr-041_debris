@@ -199,6 +199,64 @@ particleHandler.exec(particleCall);
 assert.equal(env.frame.meshJobs[0].instances, restoredInstances,
   'the recovered instances cache is reused by later frames');
 
+// Generated BlobSpline paths can write directly into each particle's cached
+// output matrix. Their evaluation scratch belongs to the particle operator,
+// and is shared by every particle and later frame.
+{
+  const splineCalls = [];
+  const splineScratches = [];
+  const generatedSpline = {
+    createEvalScratch() {
+      const scratch = { marker: splineScratches.length };
+      splineScratches.push(scratch);
+      return scratch;
+    },
+    evalInto(time, phase, matrix, scratch) {
+      splineCalls.push({ time, phase, matrix, scratch });
+      D.mat4Identity(matrix);
+      matrix[12] = time * 10;
+      return { matrix, zoom: 1 };
+    },
+    eval() {
+      assert.fail('particles should prefer the allocation-reuse spline API');
+    },
+  };
+  const splineEnvironment = environment();
+  const splineParameters = new Array(30).fill(0);
+  splineParameters[0] = 0x100;
+  splineParameters[1] = 3;
+  splineParameters[2] = 7;
+  splineParameters[12] = 0.15;
+  const splineCall = callFor(0xc5, splineParameters, [mesh, generatedSpline], splineEnvironment);
+  splineCall.op.cache = particleHandler.init(splineCall);
+
+  particleHandler.exec(splineCall);
+  const firstSplineInstances = splineEnvironment.frame.meshJobs[0].instances;
+  assert.equal(splineScratches.length, 1, 'one generated-spline scratch is created per particle operator');
+  assert.equal(splineCalls.length, firstSplineInstances.length);
+  for (let index = 0; index < splineCalls.length; index++) {
+    assert.equal(splineCalls[index].matrix, firstSplineInstances[index],
+      `particle ${index} supplies its cached matrix as the spline output`);
+    assert.equal(splineCalls[index].scratch, splineScratches[0],
+      `particle ${index} reuses the generated-spline scratch`);
+  }
+
+  const firstCallCount = splineCalls.length;
+  splineParameters[12] = 0.45;
+  D.beginRenderFrame(splineEnvironment);
+  particleHandler.exec(splineCall);
+  const secondSplineInstances = splineEnvironment.frame.meshJobs[0].instances;
+  assert.equal(splineScratches.length, 1, 'later frames reuse the generated-spline scratch');
+  assert.equal(secondSplineInstances, firstSplineInstances);
+  for (let index = 0; index < secondSplineInstances.length; index++) {
+    const call = splineCalls[firstCallCount + index];
+    assert.equal(call.matrix, firstSplineInstances[index],
+      `particle ${index} keeps passing its cached output matrix on later frames`);
+    assert.equal(call.scratch, splineScratches[0],
+      `particle ${index} keeps reusing the same generated-spline scratch`);
+  }
+}
+
 // The three generic scene modes are present in the released player even
 // though the Debris production has no operator instances for them.
 {

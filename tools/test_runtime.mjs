@@ -66,6 +66,57 @@ assert.equal(cubic.eval(2)[0], 0);
   assert.equal(value.matrix[12], 0.000002998000127263367);
 }
 
+// Generated splines are evaluated once per particle, so the allocation-free
+// entry point must preserve eval() exactly while allowing one scratch object to
+// serve many calls and independently-owned output matrices.
+{
+  const keys = [
+    { select: 0, time: 0, px: -2, py: 1, pz: 4, rx: 0.03, ry: -0.05, rz: 0.07, zoom: 0.98 },
+    { select: 0, time: 0.3, px: 1, py: -3, pz: 2, rx: -0.11, ry: 0.13, rz: 0.17, zoom: 0.94 },
+    { select: 0, time: 0.7, px: 5, py: 2, pz: -1, rx: 0.19, ry: -0.23, rz: 0.29, zoom: 0.91 },
+    { select: 0, time: 1, px: 8, py: -4, pz: 3, rx: -0.31, ry: 0.37, rz: -0.41, zoom: 0.87 },
+  ];
+  const times = [0, 0.125, 0.3, 0.5, 0.7, 0.875, 1];
+  const floatBits = value => new Uint32Array(new Float32Array([value]).buffer)[0];
+  const matrixBits = matrix => new Uint32Array(matrix.buffer, matrix.byteOffset, matrix.length);
+
+  for (let mode = 0; mode <= 5; mode++) {
+    const spline = new D.BlobSplinePath({
+      mode,
+      target: [3, -2, 7, 1],
+      tension: 0.21,
+      continuity: -0.17,
+      keys,
+    });
+    const scratch = spline.createEvalScratch();
+
+    for (const time of times) {
+      const expectedMatrix = new Float32Array(16);
+      const expected = spline.eval(time, 0.375, expectedMatrix);
+      const output = new Float32Array(16);
+      output.fill(Math.fround(123.5));
+      const actual = spline.evalInto(time, 0.375, output, scratch);
+
+      assert.equal(actual.matrix, output, `mode ${mode} at ${time} returns the provided matrix`);
+      assert.deepEqual(matrixBits(actual.matrix), matrixBits(expected.matrix),
+        `mode ${mode} at ${time} matches eval() bit-for-bit`);
+      assert.equal(floatBits(actual.zoom), floatBits(expected.zoom),
+        `mode ${mode} at ${time} preserves zoom bits`);
+    }
+
+    const first = new Float32Array(16);
+    spline.evalInto(0.2, 0, first, scratch);
+    const firstBits = matrixBits(first).slice();
+    const second = new Float32Array(16);
+    const secondResult = spline.evalInto(0.8, 0, second, scratch);
+    assert.equal(secondResult.matrix, second,
+      `mode ${mode} keeps a second caller's output matrix`);
+    assert.notEqual(first, second);
+    assert.deepEqual(matrixBits(first), firstBits,
+      `mode ${mode} does not overwrite a previous caller's output matrix`);
+  }
+}
+
 const genericRegistry = {
   900: { id: 900, convention: 2, outputClass: 'KC_ANY', name: 'VM' },
 };

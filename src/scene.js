@@ -339,11 +339,19 @@ function evalValueSpline(spline, time, out = new Float32Array(4)) {
   return out;
 }
 
-function evalGeneratedSpline(spline, time) {
+function evalGeneratedSpline(spline, time, matrix, scratch) {
   if (!spline) return null;
-  if (typeof spline.evalMatrix === 'function') return spline.evalMatrix(time, 0);
+  if (typeof spline.evalInto === 'function') {
+    if (scratch.generatedSpline !== spline) {
+      scratch.generatedSpline = spline;
+      scratch.generatedSplineEval = typeof spline.createEvalScratch === 'function'
+        ? spline.createEvalScratch() : null;
+    }
+    return spline.evalInto(time, 0, matrix, scratch.generatedSplineEval);
+  }
+  if (typeof spline.evalMatrix === 'function') return spline.evalMatrix(time, 0, matrix);
   if (typeof spline.eval !== 'function') return null;
-  const result = spline.eval(time, 0);
+  const result = spline.eval(time, 0, matrix);
   if (result?.matrix || (ArrayBuffer.isView(result) && result.length === 16)) return result;
   return null;
 }
@@ -432,6 +440,8 @@ function particleScratch(mem, mode, count) {
     splineValue: new Float32Array(4),
     splineAhead: new Float32Array(4),
     splineDirection: [0, 0, 0],
+    generatedSpline: null,
+    generatedSplineEval: null,
     composedMatrix: rotating ? new Float32Array(16) : null,
     particles: Array.from({ length: count }, () => ({
       position: new Float32Array(3),
@@ -510,9 +520,10 @@ function execParticles(call) {
       }
     }
 
-    const generated = evalGeneratedSpline(generatedSpline, fraction);
+    const generated = evalGeneratedSpline(generatedSpline, fraction, matrix, scratch);
     if (generated) {
-      mat4Copy(generated.matrix || generated, matrix);
+      const generatedMatrix = generated.matrix || generated;
+      if (generatedMatrix !== matrix) mat4Copy(generatedMatrix, matrix);
       const x = matrix[0] * position[0] + matrix[4] * position[1] + matrix[8] * position[2];
       const y = matrix[1] * position[0] + matrix[5] * position[1] + matrix[9] * position[2];
       const z = matrix[2] * position[0] + matrix[6] * position[1] + matrix[10] * position[2];
