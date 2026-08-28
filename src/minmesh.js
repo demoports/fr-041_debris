@@ -3524,8 +3524,9 @@ function meshToMinCompact(result, view, oldMeshHasColor, oldMeshHasUV0, oldMeshH
     }
     if (oldIndices.length < 3) continue;
     const vertices = oldIndices.map(addOldVertex);
+    const selected = storage.faceBytes[faceIndex * 4 + 2] !== 0;
     const used = storage.faceBytes[faceIndex * 4 + 3] !== 0;
-    if (vertices.length >= 8) {
+    if (selected && vertices.length >= 8) {
       const centroid = addCentroid(oldIndices);
       for (let index = 0; index < vertices.length; index++) {
         const converted = makeFace([
@@ -3535,7 +3536,11 @@ function meshToMinCompact(result, view, oldMeshHasColor, oldMeshHasUV0, oldMeshH
         result.faces.push(converted);
       }
     } else {
-      const converted = makeFace(vertices, material);
+      // GenMesh::Triangulate only visits faces selected before Mesh_ToMin
+      // calls All2Sel. An unselected high-degree face consequently reaches
+      // the converter unchanged, whose fixed KMM_MAXVERT loop keeps at most
+      // its first eight corners.
+      const converted = makeFace(vertices.slice(0, 8), material);
       converted.flags = used ? 0 : 1;
       result.faces.push(converted);
     }
@@ -3633,7 +3638,7 @@ function meshToMin(source) {
       const oldIndices = Array.from(source.faceEdges(faceIndex), edge => source.getVertId(edge));
       if (oldIndices.length < 3) continue;
       const vertices = oldIndices.map(addOldVertex);
-      if (vertices.length >= 8) {
+      if (face.select && vertices.length >= 8) {
         const centroid = addCentroid(oldIndices);
         for (let index = 0; index < vertices.length; index++) {
           const converted = makeFace([
@@ -3642,7 +3647,7 @@ function meshToMin(source) {
           converted.flags = face.used ? 0 : 1; result.faces.push(converted);
         }
       } else {
-        const converted = makeFace(vertices, material);
+        const converted = makeFace(vertices.slice(0, 8), material);
         converted.flags = face.used ? 0 : 1; result.faces.push(converted);
       }
     }

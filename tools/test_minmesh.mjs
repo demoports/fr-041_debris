@@ -1304,6 +1304,15 @@ for (let index = 0; index < 8; index++) {
   oldOctagon.vertices[vertexIndex].uv1.set([index + 10, index + 20, 0, 1]);
 }
 oldOctagon.setPolygons([{ verts: [0, 1, 2, 3, 4, 5, 6, 7], material: 1, select: true, used: false }]);
+const unselectedExpandedNinegon = new D.Mesh(D.MESH_DEFAULT_VERTEX_MASK);
+for (let index = 0; index < 9; index++) {
+  const angle = index * Math.PI * 2 / 9;
+  unselectedExpandedNinegon.addVertex([Math.cos(angle), Math.sin(angle), 0], [index, 0]);
+}
+unselectedExpandedNinegon.setPolygons([{
+  verts: [0, 1, 2, 3, 4, 5, 6, 7, 8], material: 1, select: false, used: false,
+}]);
+const unselectedCompactNinegon = unselectedExpandedNinegon.clone().compact();
 oldOctagon.compact();
 oldOctagon.ensureExpanded = () => {
   throw new Error('compact Mesh_ToMin expanded its source');
@@ -1319,6 +1328,24 @@ assert.deepEqual(convertedOctagon.faces.map(face => face.vertices), [
   [8, 0, 1], [8, 1, 2], [8, 2, 3], [8, 3, 4],
   [8, 4, 5], [8, 5, 6], [8, 6, 7], [8, 7, 0],
 ]);
+
+// The preliminary native Triangulate call deliberately leaves an unselected
+// high-degree face alone. All2Sel happens afterwards, so Mesh_ToMin retains
+// all selected vertices but its fixed KMM_MAXVERT face loop copies only the
+// original first eight corners instead of adding a centroid fan.
+for (const [label, source] of [
+  ['expanded', unselectedExpandedNinegon],
+  ['compact', unselectedCompactNinegon],
+]) {
+  const convertedUnselectedNinegon = D.meshToMin(source);
+  assert.equal(convertedUnselectedNinegon.vertices.length, 9,
+    `${label} unselected nine-gon retains all old selected vertices without a centroid`);
+  assert.equal(convertedUnselectedNinegon.faces.length, 1,
+    `${label} unselected nine-gon remains one face`);
+  assert.deepEqual(convertedUnselectedNinegon.faces[0].vertices,
+    [0, 1, 2, 3, 4, 5, 6, 7],
+    `${label} unselected nine-gon truncates to the native first-eight corner order`);
+}
 
 const conversionFloatBits = value => Array.from(new Uint32Array(
   value.buffer, value.byteOffset, value.byteLength / Uint32Array.BYTES_PER_ELEMENT,
