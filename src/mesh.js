@@ -2624,7 +2624,6 @@ import {
     const faceLoops = source.faces.map(face => face.edge >= 0 ? source.faceEdges(face) : []);
     const incidentFaces = Array.from({ length: source.vertices.length }, () => []);
     const neighbors = Array.from({ length: source.vertices.length }, () => new Set());
-    const boundaryNeighbors = Array.from({ length: source.vertices.length }, () => new Set());
     const incidentCreases = new Uint32Array(source.vertices.length);
     for (let faceIndex = 0; faceIndex < source.faces.length; faceIndex++) {
       const face = source.faces[faceIndex];
@@ -2641,9 +2640,46 @@ import {
       const selected1 = !!source.faces[edge.face[1]]?.select;
       if (!(selected0 || selected1)) continue;
       neighbors[a].add(b); neighbors[b].add(a);
-      if (!(selected0 && selected1)) {
-        boundaryNeighbors[a].add(b); boundaryNeighbors[b].add(a);
+    }
+
+    // GenMesh finds the boundary pair by walking the one-ring from Vert[i].Temp
+    // with NextVertEdge, remembering the LAST half-edge whose face is
+    // unselected (genmesh.cpp:1685-1688 - Face.Temp2 is only assigned for
+    // selected faces at 1628, so Temp2 != -1 is exactly Select). The boundary
+    // rule then takes that edge's far vertex and the far vertex of its ring
+    // successor (1721-1727). Its do/while always stops after one step because
+    // NextVertEdge(c) = Prev[c&1]^1 makes GetFaceI(NextVertEdge(c)) equal
+    // GetFace(c), which is unselected by construction. The two edges therefore
+    // bound one unselected sector, and when a vertex has two or more adjacent
+    // unselected faces one of them points OUT of the selected region - an edge
+    // that has no selected face at all, so no "edges along the border" rule can
+    // produce it.
+    const vertTemp = new Int32Array(source.vertices.length).fill(-1);
+    for (let faceIndex = 0; faceIndex < source.faces.length; faceIndex++) {
+      if (!source.faces[faceIndex].select) continue;
+      for (const halfedge of faceLoops[faceIndex]) {
+        const vertex = source.getVertId(halfedge);
+        // Vert[v].Temp is written once, the first time a selected face meets
+        // the vertex with ReIndex == v (genmesh.cpp:1651-1657).
+        if (vertex >= 0 && vertTemp[vertex] < 0) vertTemp[vertex] = halfedge;
       }
+    }
+    const ringLimit = source.edges.length * 2 + 1;
+    const boundaryPair = new Map();
+    for (let vertex = 0; vertex < source.vertices.length; vertex++) {
+      const start = vertTemp[vertex];
+      if (start < 0) continue;
+      let edge = start, last = -1, guard = 0;
+      do {
+        if (!source.getFace(edge)?.select) last = edge;
+        edge = source.nextVertEdge(edge);
+        if (++guard > ringLimit) { last = -1; break; }
+      } while (edge !== start);
+      if (last < 0) continue;
+      boundaryPair.set(vertex, [
+        source.getVertId(last ^ 1),
+        source.getVertId(source.nextVertEdge(last) ^ 1),
+      ]);
     }
 
     // Position is feature zero and is never creased. Work out its even-vertex
@@ -2652,7 +2688,6 @@ import {
     const physicalGroups = new Map();
     const physicalFaces = new Map();
     const physicalNeighbors = new Map();
-    const physicalBoundary = new Map();
     for (let i = 0; i < source.vertices.length; i++) {
       const first = source.vertices[i].first | 0;
       const group = physicalGroups.get(first);
@@ -2679,12 +2714,6 @@ import {
       if (!setA) physicalNeighbors.set(a, setA = new Set());
       if (!setB) physicalNeighbors.set(b, setB = new Set());
       setA.add(b); setB.add(a);
-      if (!(selected0 && selected1)) {
-        let boundaryA = physicalBoundary.get(a), boundaryB = physicalBoundary.get(b);
-        if (!boundaryA) physicalBoundary.set(a, boundaryA = new Set());
-        if (!boundaryB) physicalBoundary.set(b, boundaryB = new Set());
-        boundaryA.add(b); boundaryB.add(a);
-      }
     }
 
     const faceCenters = new Map();
@@ -2708,12 +2737,15 @@ import {
       const faces = [...(physicalFaces.get(first) || [])];
       if (!faces.length) continue;
       const original = source.vertices[first].position;
-      const boundary = [...(physicalBoundary.get(first) || [])];
+      // Every wedge at this point shares the position, so any group member
+      // that the ring walk reached supplies the same pair.
+      const pair = boundaryPair.get(first) ??
+        (physicalGroups.get(first) || []).map(index => boundaryPair.get(index)).find(Boolean);
       const value = new Float32Array(4);
-      if (boundary.length) {
+      if (pair) {
         const w1 = alpha * 0.125;
-        const a = source.vertices[boundary[0]].position;
-        const b = source.vertices[boundary[boundary.length - 1]].position;
+        const a = source.vertices[pair[0]].position;
+        const b = source.vertices[pair[1]].position;
         for (let component = 0; component < 4; component++) {
           value[component] = f32(original[component] * (1 - 2 * w1) + (a[component] + b[component]) * w1);
         }
@@ -2738,12 +2770,12 @@ import {
       const faces = incidentFaces[vertexIndex];
       if (!faces.length) continue;
       const original = source.vertices[vertexIndex];
-      const boundary = [...boundaryNeighbors[vertexIndex]];
-      if (boundary.length) {
+      const pair = boundaryPair.get(vertexIndex);
+      if (pair) {
         const w1 = alpha * 0.125;
         const terms = [[original, 1 - 2 * w1]];
-        terms.push([source.vertices[boundary[0]], w1]);
-        terms.push([source.vertices[boundary[boundary.length - 1]], w1]);
+        terms.push([source.vertices[pair[0]], w1]);
+        terms.push([source.vertices[pair[1]], w1]);
         weightedValues(output.vertices[vertexIndex], terms);
       } else {
         const n = faces.length;

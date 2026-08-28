@@ -599,6 +599,29 @@ assert.deepEqual(Array.from(subdivided.vertices[0].uv), Array.from(cube.vertices
 assert.ok(subdivided.edges.some(edge => edge.vert.includes(cube.vertices.length + cube.faces.length) &&
   edge.crease === sourceEdge.crease), 'both split edge halves retain native crease metadata');
 
+// GenMesh's boundary even-vertex rule takes the two half-edges that bound one
+// UNSELECTED sector of the one-ring (genmesh.cpp:1721-1727), not the two edges
+// running along the selection border. Where a vertex has two or more adjacent
+// unselected faces those differ: one of the reference's two edges points out of
+// the selected region and has no selected face at all.
+{
+  const grid = D.Mesh_Grid(0, 2, 2);
+  for (const face of grid.faces) face.select = false;
+  grid.faces[0].select = true;
+  const subdivided = D.Mesh_Subdivide(grid, 1, 1, 1);
+  const at = target => subdivided.vertices.findIndex((_, index) =>
+    grid.vertices[index].position.subarray(0, 3).every((value, axis) => value === target[axis]));
+  const border = at([-0.5, 0, 0]);
+  assert.ok(border >= 0);
+  // alpha 1 gives w1 = 0.125 and w2 = 0.75. The reference pair here is the
+  // corner (-0.5,0,-0.5) plus the grid centre (0,0,0), so the vertex moves to
+  // 0.75*(-0.5,0,0) + 0.125*((-0.5,0,-0.5) + (0,0,0)) = (-0.4375,0,-0.0625).
+  assert.deepEqual(
+    Array.from(subdivided.vertices[border].position.subarray(0, 3)),
+    [-0.4375, 0, -0.0625],
+    'boundary even vertex uses the sector-bounding pair, not the two collinear border edges');
+}
+
 // Debris ops 15654..15660 selectively subdivide the destructible road twice.
 // Split points turn neighboring quads into pentagons; their cyclic Face.Edge
 // origin must still make a consistently wound fan because Mesh_ToMin and the
