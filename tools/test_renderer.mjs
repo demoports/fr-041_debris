@@ -2584,6 +2584,37 @@ assert.equal(volume.faceFront.length, 1);
 assert.equal(volume.silhouetteIndexCount, 18);
 assert.equal(volume.capIndexCount, 3);
 
+// An edge whose neighbouring polygon is not a shadow caster still reads that
+// neighbour's plane: EngMesh assigns Face[i].Temp to every face before the
+// caster test (engine.cpp:2529) and takes edge->Face[1] unconditionally
+// (engine.cpp:2663), so a non-caster aliases the next caster's plane. Here
+// the non-casting quad sorts first, so it borrows the casting quad's own
+// plane and their shared edge can never be a silhouette.
+const borrowedPlaneGeometry = {
+  positions: new Float32Array([
+    0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 2, 0, 0, 2, 1, 0,
+  ]),
+  // Non-casting quad (source face 0) first, casting quad (source face 1)
+  // second; they share edge 1-2.
+  indices: new Uint16Array([1, 4, 5, 1, 5, 2, 0, 1, 2, 0, 2, 3]),
+  groups: [{ start: 0, count: 12 }],
+  shadowTriangleMask: new Uint8Array([0, 0, 1, 1]),
+  shadowFaceMap: new Uint32Array([0, 0, 1, 1]),
+};
+const borrowed = D.buildShadowVolume(
+  borrowedPlaneGeometry, borrowedPlaneGeometry.groups, [0.5, 0.5, -1]);
+assert.equal(borrowed.topology.polygonCount, 2,
+  'the non-casting neighbour stays in the topology so its plane can be read');
+assert.deepEqual(Array.from(borrowed.topology.edgePlanes), [1, 1],
+  'the non-caster aliases the plane slot of the next caster in source order');
+assert.deepEqual(Array.from(borrowed.faceFront), [0, 0],
+  'both fan triangles of the casting quad share its one back-facing plane');
+// Three of the casting quad's four perimeter edges are silhouettes; the
+// shared edge is not, because both sides resolve to the same plane. Forcing
+// the absent neighbour to "front" instead would emit a fourth.
+assert.equal(borrowed.silhouetteIndexCount, 18);
+assert.equal(borrowed.capIndexCount, 6);
+
 // Animated MinMesh keeps indices, weld maps and groups stable while skinning
 // positions in-place. Preserve its expensive edge topology and refresh the
 // canonical/doubled position arrays from the retained render-vertex sources.
