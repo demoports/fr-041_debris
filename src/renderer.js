@@ -961,26 +961,50 @@ function normalizePreparedGeometry(mesh, options) {
     }
   }
   let shadowTriangleMask = prepared.shadowTriangleMask || null;
+  // The source polygon index behind each fan triangle. EngMesh keeps one
+  // plane per polygon and points every fan triangle at it through FaceMap
+  // (engine.cpp:2585 and :2645), so the shadow pass needs this grouping.
+  let shadowFaceMap = prepared.shadowFaceMap || null;
   if (!shadowTriangleMask && mesh?.kind === 'mesh' && typeof mesh.faceVertices === 'function') {
     const buckets = new Map();
-    for (const face of mesh.faces) {
+    const faceBuckets = new Map();
+    for (let faceIndex = 0; faceIndex < mesh.faces.length; faceIndex++) {
+      const face = mesh.faces[faceIndex];
       if (!face.material || face.edge < 0) continue;
       const count = Math.max(0, mesh.faceVertices(face).length - 2);
       let bucket = buckets.get(face.material);
       if (!bucket) buckets.set(face.material, bucket = []);
-      for (let index = 0; index < count; index++) bucket.push(face.used ? 1 : 0);
+      let faceBucket = faceBuckets.get(face.material);
+      if (!faceBucket) faceBuckets.set(face.material, faceBucket = []);
+      for (let index = 0; index < count; index++) {
+        bucket.push(face.used ? 1 : 0);
+        faceBucket.push(faceIndex);
+      }
     }
     const values = Array.from(buckets.values()).flat();
-    if (values.length === indices.length / 3) shadowTriangleMask = new Uint8Array(values);
+    if (values.length === indices.length / 3) {
+      shadowTriangleMask = new Uint8Array(values);
+      if (!shadowFaceMap) shadowFaceMap = new Uint32Array(Array.from(faceBuckets.values()).flat());
+    }
   } else if (!shadowTriangleMask && mesh?.kind === 'minmesh') {
     const buckets = Array.from({ length: mesh.clusters?.length || 0 }, () => []);
-    for (const face of mesh.faces || []) {
+    const faceBuckets = Array.from({ length: mesh.clusters?.length || 0 }, () => []);
+    const faces = mesh.faces || [];
+    for (let faceIndex = 0; faceIndex < faces.length; faceIndex++) {
+      const face = faces[faceIndex];
       if (face.cluster <= 0 || face.cluster >= buckets.length || face.count < 3) continue;
-      for (let index = 2; index < face.count; index++) buckets[face.cluster].push(face.flags & 1 ? 0 : 1);
+      for (let index = 2; index < face.count; index++) {
+        buckets[face.cluster].push(face.flags & 1 ? 0 : 1);
+        faceBuckets[face.cluster].push(faceIndex);
+      }
     }
     const values = buckets.slice(1).flat();
-    if (values.length === indices.length / 3) shadowTriangleMask = new Uint8Array(values);
+    if (values.length === indices.length / 3) {
+      shadowTriangleMask = new Uint8Array(values);
+      if (!shadowFaceMap) shadowFaceMap = new Uint32Array(faceBuckets.slice(1).flat());
+    }
   }
+  if (shadowFaceMap && shadowFaceMap.length !== indices.length / 3) shadowFaceMap = null;
   // Animated MinMesh positions have already been skinned by prepare(time),
   // while its authored bounds remain in bind-pose space. Recompute those
   // bounds from the prepared positions; static geometry may reuse its native
@@ -1002,7 +1026,8 @@ function normalizePreparedGeometry(mesh, options) {
   return {
     source: prepared, positions, normals, uvs, uv1, tangents, colors, indices, groups,
     materials: prepared.materials || mesh?.materials || mesh?.Mtrl || [], vertexCount,
-    shadowVertexMap, shadowTriangleMask, bounds,
+    shadowVertexMap, shadowTriangleMask, shadowFaceMap,
+    shadowFaceNormals: prepared.shadowFaceNormals || null, bounds,
     // Procedural producers can identify the buffers they changed without
     // forcing every static attribute and the index buffer back across the
     // WebGL boundary. Unknown producers omit this and retain the conservative
@@ -2959,17 +2984,62 @@ function prepareShadowTopology(geometry, groups = geometry.groups) {
     sourceToCanonical.set(sourceIndex, result);
     return result;
   };
+  // EngMesh works in source polygons, not fan triangles: PlaneCount is
+  // faceCount+1 (engine.cpp:2585), FaceMap points every fan triangle of one
+  // polygon at that single plane (engine.cpp:2645), and the edge table is
+  // built by walking each polygon's perimeter, so a fan diagonal is never an
+  // edge. Rebuild the polygons here before deriving edges and planes.
   const faces = [];
+  const trianglePolygon = [];
+  const polygonRings = [];
+  const polygonSources = [];
+  const faceMap = geometry.shadowFaceMap;
+  let ring = null;
+  let ringSource = -1;
+  const flushRing = () => {
+    if (!ring) return;
+    // Collapse vertices the position weld made identical; a polygon whose
+    // perimeter degenerates below a triangle contributes no edges.
+    const collapsed = [];
+    for (const value of ring) {
+      if (collapsed[collapsed.length - 1] !== value) collapsed.push(value);
+    }
+    while (collapsed.length > 1 && collapsed[0] === collapsed[collapsed.length - 1]) collapsed.pop();
+    if (collapsed.length >= 3) {
+      polygonRings.push(collapsed);
+      polygonSources.push(ringSource);
+    } else {
+      // Keep the polygon slot so trianglePolygon indices stay valid.
+      polygonRings.push(null);
+      polygonSources.push(ringSource);
+    }
+    ring = null;
+  };
   for (const group of groups || []) {
     const end = Math.min(indices.length, group.start + group.count);
     for (let cursor = group.start; cursor + 2 < end; cursor += 3) {
-      if (geometry.shadowTriangleMask && !geometry.shadowTriangleMask[cursor / 3]) continue;
+      const triangle = cursor / 3;
+      if (geometry.shadowTriangleMask && !geometry.shadowTriangleMask[triangle]) continue;
       const a = canonicalIndex(indices[cursor]);
       const b = canonicalIndex(indices[cursor + 1]);
       const c = canonicalIndex(indices[cursor + 2]);
-      if (a !== b && b !== c && c !== a) faces.push(a, b, c);
+      const source = faceMap ? faceMap[triangle] : triangle;
+      if (ring === null || source !== ringSource) {
+        flushRing();
+        ringSource = source;
+        // The producers fan a ring [v0..vn-1] as (v0,v1,v2), (v0,v2,v3), ...
+        // so the ring is the first triangle plus each later third vertex.
+        ring = [a, b, c];
+      } else {
+        ring.push(c);
+      }
+      if (a !== b && b !== c && c !== a) {
+        faces.push(a, b, c);
+        trianglePolygon.push(polygonRings.length);
+      }
     }
   }
+  flushRing();
   const edges = new Map();
   const vertexCount = canonical.length / 3;
   const addEdge = (a, b, face) => {
@@ -2980,9 +3050,58 @@ function prepareShadowTopology(geometry, groups = geometry.groups) {
     if (!records) edges.set(key, records = []);
     records.push({ a, b, face });
   };
-  for (let face = 0; face < faces.length / 3; face++) {
-    const offset = face * 3, a = faces[offset], b = faces[offset + 1], c = faces[offset + 2];
-    addEdge(a, b, face); addEdge(b, c, face); addEdge(c, a, face);
+  // One edge per polygon perimeter segment. `face` now names a polygon.
+  for (let polygon = 0; polygon < polygonRings.length; polygon++) {
+    const loop = polygonRings[polygon];
+    if (!loop) continue;
+    for (let index = 0; index < loop.length; index++) {
+      addEdge(loop[index], loop[(index + 1) % loop.length], polygon);
+    }
+  }
+  // One plane per polygon. GenMinMesh planes take the stored face normal
+  // (engine.cpp:3259-3262); GenMesh recomputes it with CalcFaceNormalAccurate
+  // (genmesh.cpp), which walks the ring's corners and keeps the last one,
+  // stopping early on a degenerate corner and falling back to (1,0,0).
+  const sourceNormals = geometry.shadowFaceNormals || null;
+  const polygonPlanes = new Float32Array(polygonRings.length * 4);
+  for (let polygon = 0; polygon < polygonRings.length; polygon++) {
+    const loop = polygonRings[polygon];
+    if (!loop) continue;
+    let nx = 0, ny = 0, nz = 0;
+    const source = polygonSources[polygon];
+    if (sourceNormals && source * 3 + 2 < sourceNormals.length) {
+      nx = sourceNormals[source * 3];
+      ny = sourceNormals[source * 3 + 1];
+      nz = sourceNormals[source * 3 + 2];
+    }
+    if (!sourceNormals || (nx === 0 && ny === 0 && nz === 0)) {
+      const count = loop.length;
+      let length = 0;
+      for (let corner = 0; corner < count; corner++) {
+        const previous = loop[(corner + count - 1) % count] * 3;
+        const current = loop[corner] * 3;
+        const next = loop[(corner + 1) % count] * 3;
+        const t1x = canonical[current] - canonical[previous];
+        const t1y = canonical[current + 1] - canonical[previous + 1];
+        const t1z = canonical[current + 2] - canonical[previous + 2];
+        const t2x = canonical[next] - canonical[previous];
+        const t2y = canonical[next + 1] - canonical[previous + 1];
+        const t2z = canonical[next + 2] - canonical[previous + 2];
+        nx = t1y * t2z - t1z * t2y;
+        ny = t1z * t2x - t1x * t2z;
+        nz = t1x * t2y - t1y * t2x;
+        length = nx * nx + ny * ny + nz * nz;
+        if (!(length > 1e-40)) break;
+      }
+      if (!(length > 1e-40)) { nx = 1; ny = 0; nz = 0; }
+    }
+    const origin = loop[0] * 3;
+    const offset = polygon * 4;
+    polygonPlanes[offset] = nx;
+    polygonPlanes[offset + 1] = ny;
+    polygonPlanes[offset + 2] = nz;
+    polygonPlanes[offset + 3] = -(nx * canonical[origin] + ny * canonical[origin + 1] +
+      nz * canonical[origin + 2]);
   }
   const edgeRecords = Array.from(edges.values());
   let boundaryEdges = 0, nonManifoldEdges = 0, windingConflictEdges = 0;
@@ -3013,6 +3132,9 @@ function prepareShadowTopology(geometry, groups = geometry.groups) {
     sourceIndices: new Uint32Array(canonicalSources),
     usesShadowVertexMap,
     faces: new Uint32Array(faces),
+    trianglePolygon: new Uint32Array(trianglePolygon),
+    polygonPlanes,
+    polygonCount: polygonRings.length,
     edges: edgeRecords,
     boundaryEdges,
     nonManifoldEdges,
@@ -3102,30 +3224,22 @@ function buildShadowVolume(geometry, groups, light, model = mat4Identity(), incl
   // shadow job. TransR is not an affine inverse: it keeps authored object
   // scale in c4, and both plane selection and extrusion consume that value.
   legacyTransRVector(model, worldLightPosition, true, lightPosition);
-  const faceFront = shadowScratchArray(scratch, 'faceFront', Uint8Array,
-    topology.faces.length / 3);
-  for (let face = 0; face < faceFront.length; face++) {
-    const offset = face * 3;
-    const ia = topology.faces[offset] * 3;
-    const ib = topology.faces[offset + 1] * 3;
-    const ic = topology.faces[offset + 2] * 3;
-    const abx = positions[ib] - positions[ia];
-    const aby = positions[ib + 1] - positions[ia + 1];
-    const abz = positions[ib + 2] - positions[ia + 2];
-    const acx = positions[ic] - positions[ia];
-    const acy = positions[ic + 1] - positions[ia + 1];
-    const acz = positions[ic + 2] - positions[ia + 2];
-    const nx = aby * acz - abz * acy;
-    const ny = abz * acx - abx * acz;
-    const nz = abx * acy - aby * acx;
-    faceFront[face] = nx * (lightPosition[0] - positions[ia]) +
-      ny * (lightPosition[1] - positions[ia + 1]) +
-      nz * (lightPosition[2] - positions[ia + 2]) >= 0 ? 1 : 0;
+  // Engine_::UpdateShadowCacheJob classifies one plane per source polygon
+  // (engine.cpp:3584-3589), not one per fan triangle, so every triangle of a
+  // polygon shares its front/back bit and its cap lands on one side.
+  const polygonCount = topology.polygonCount ?? (topology.faces.length / 3);
+  const planes = topology.polygonPlanes;
+  const faceFront = shadowScratchArray(scratch, 'faceFront', Uint8Array, polygonCount);
+  for (let polygon = 0; polygon < polygonCount; polygon++) {
+    const offset = polygon * 4;
+    faceFront[polygon] = planes[offset] * lightPosition[0] +
+      planes[offset + 1] * lightPosition[1] +
+      planes[offset + 2] * lightPosition[2] + planes[offset + 3] >= 0 ? 1 : 0;
   }
 
   const IndexType = vertexCount * 2 > 0xffff ? Uint32Array : Uint16Array;
   const maximumIndexCount = topology.edges.length * 6 +
-    (includeCaps ? faceFront.length * 3 : 0);
+    (includeCaps ? topology.faces.length : 0);
   const indexValues = shadowScratchArray(scratch, 'indices', IndexType, maximumIndexCount);
   let indexCount = 0;
   for (const records of topology.edges) {
@@ -3145,8 +3259,9 @@ function buildShadowVolume(geometry, groups, light, model = mat4Identity(), incl
   }
   const silhouetteIndexCount = indexCount;
   if (includeCaps) {
-    for (let face = 0; face < faceFront.length; face++) {
-      const offset = face * 3, side = faceFront[face];
+    const triangleCount = topology.faces.length / 3;
+    for (let face = 0; face < triangleCount; face++) {
+      const offset = face * 3, side = faceFront[topology.trianglePolygon[face]];
       indexValues[indexCount++] = topology.faces[offset] * 2 + side;
       indexValues[indexCount++] = topology.faces[offset + 1] * 2 + side;
       indexValues[indexCount++] = topology.faces[offset + 2] * 2 + side;

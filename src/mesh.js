@@ -413,6 +413,10 @@ import {
 
     const perMaterial = new Map();
     const perMaterialShadow = new Map();
+    // EngMesh gives every fan triangle of one polygon the same FaceMap entry
+    // (engine.cpp:2645) so they share one plane. Carry the source polygon
+    // index per triangle to reproduce that grouping.
+    const perMaterialFace = new Map();
     for (let faceIndex = 0; faceIndex < storage.faceCount; faceIndex++) {
       const faceOffset = faceIndex * 5;
       const materialIndex = storage.faceInts[faceOffset];
@@ -423,20 +427,25 @@ import {
       if (!list) perMaterial.set(materialIndex, list = []);
       let shadow = perMaterialShadow.get(materialIndex);
       if (!shadow) perMaterialShadow.set(materialIndex, shadow = []);
+      let faceMap = perMaterialFace.get(materialIndex);
+      if (!faceMap) perMaterialFace.set(materialIndex, faceMap = []);
       const used = storage.faceBytes[faceIndex * 4 + 3] !== 0;
       for (let i = 1; i + 1 < ids.length; i++) {
         list.push(ids[0], ids[i], ids[i + 1]);
         shadow.push(used ? 1 : 0);
+        faceMap.push(faceIndex);
       }
     }
     const indexValues = [];
     const triangleMaterials = [];
     const shadowTriangleValues = [];
+    const shadowFaceValues = [];
     const groups = [];
     for (const [materialIndex, list] of perMaterial) {
       const start = indexValues.length;
       indexValues.push(...list);
       shadowTriangleValues.push(...(perMaterialShadow.get(materialIndex) || []));
+      shadowFaceValues.push(...(perMaterialFace.get(materialIndex) || []));
       for (let i = 0; i < list.length / 3; i++) triangleMaterials.push(materialIndex);
       const slot = mesh.materials[materialIndex] || mesh.materials[0];
       groups.push({
@@ -449,6 +458,7 @@ import {
       indices: new Uint32Array(indexValues),
       triangleMaterials: new Uint16Array(triangleMaterials),
       shadowVertexMap, shadowTriangleMask: new Uint8Array(shadowTriangleValues),
+      shadowFaceMap: new Uint32Array(shadowFaceValues),
       groups, materials: mesh.materials, bounds: compactBounds(storage, true),
     };
   }
@@ -1408,7 +1418,9 @@ import {
       }
       const perMaterial = new Map();
       const perMaterialShadow = new Map();
-      for (const face of this.faces) {
+      const perMaterialFace = new Map();
+      for (let faceIndex = 0; faceIndex < this.faces.length; faceIndex++) {
+        const face = this.faces[faceIndex];
         if (!face.material || face.edge < 0) continue;
         const ids = this.faceVertices(face);
         if (ids.length < 3) continue;
@@ -1416,19 +1428,24 @@ import {
         if (!list) perMaterial.set(face.material, list = []);
         let shadow = perMaterialShadow.get(face.material);
         if (!shadow) perMaterialShadow.set(face.material, shadow = []);
+        let faceMap = perMaterialFace.get(face.material);
+        if (!faceMap) perMaterialFace.set(face.material, faceMap = []);
         for (let i = 1; i + 1 < ids.length; i++) {
           list.push(ids[0], ids[i], ids[i + 1]);
           shadow.push(face.used ? 1 : 0);
+          faceMap.push(faceIndex);
         }
       }
       const indexValues = [];
       const triangleMaterials = [];
       const shadowTriangleValues = [];
+      const shadowFaceValues = [];
       const groups = [];
       for (const [materialIndex, list] of perMaterial) {
         const start = indexValues.length;
         indexValues.push(...list);
         shadowTriangleValues.push(...(perMaterialShadow.get(materialIndex) || []));
+        shadowFaceValues.push(...(perMaterialFace.get(materialIndex) || []));
         for (let i = 0; i < list.length / 3; i++) triangleMaterials.push(materialIndex);
         const slot = this.materials[materialIndex] || this.materials[0];
         groups.push({
@@ -1441,6 +1458,7 @@ import {
         indices: new Uint32Array(indexValues),
         triangleMaterials: new Uint16Array(triangleMaterials),
         shadowVertexMap, shadowTriangleMask: new Uint8Array(shadowTriangleValues),
+        shadowFaceMap: new Uint32Array(shadowFaceValues),
         groups, materials: this.materials, bounds: this.bounds(true),
       };
       // Renderer buffers are now self-contained. Return topology to dormant

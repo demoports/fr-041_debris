@@ -405,6 +405,9 @@ function compactPreparedTemplate(mesh, storage) {
   const clusters = storage.clusters;
   const buckets = Array.from({ length: clusters.length }, () => []);
   const shadowBuckets = Array.from({ length: clusters.length }, () => []);
+  // Every fan triangle of one polygon shares its EngMesh FaceMap entry
+  // (engine.cpp:2645); keep the source polygon index per triangle.
+  const faceBuckets = Array.from({ length: clusters.length }, () => []);
   for (let faceIndex = 0; faceIndex < storage.faceCount; faceIndex++) {
     const intOffset = faceIndex * 4;
     const faceCount = storage.faceInts[intOffset + 1];
@@ -418,6 +421,7 @@ function compactPreparedTemplate(mesh, storage) {
         corner - 1 < available ? storage.faceVertices[start + corner - 1] : undefined,
         corner < available ? storage.faceVertices[start + corner] : undefined);
       shadowBuckets[cluster].push(storage.faceFlags[faceIndex] & 1 ? 0 : 1);
+      faceBuckets[cluster].push(faceIndex);
     }
   }
   const indexCount = buckets.reduce((sum, bucket) => sum + bucket.length, 0);
@@ -440,9 +444,11 @@ function compactPreparedTemplate(mesh, storage) {
     cursor += bucket.length;
   }
   const shadowTriangleMask = new Uint8Array(indexCount / 3);
+  const shadowFaceMap = new Uint32Array(indexCount / 3);
   cursor = 0;
   for (let clusterIndex = 1; clusterIndex < shadowBuckets.length; clusterIndex++) {
     shadowTriangleMask.set(shadowBuckets[clusterIndex], cursor);
+    shadowFaceMap.set(faceBuckets[clusterIndex], cursor);
     cursor += shadowBuckets[clusterIndex].length;
   }
   const preparedClusters = clusters.map(cluster => makeCluster(
@@ -451,7 +457,10 @@ function compactPreparedTemplate(mesh, storage) {
   return {
     kind: 'indexed-geometry', sourceKind: mesh.kind,
     uv0, uv1, uvs: uv0, colors, indices, boneWeights, boneIndices,
-    groups, shadowVertexMap, shadowTriangleMask,
+    groups, shadowVertexMap, shadowTriangleMask, shadowFaceMap,
+    // EngMesh takes the GenMinMesh shadow plane straight from the stored
+    // face normal (engine.cpp:3259-3262) rather than recomputing it.
+    shadowFaceNormals: storage.faceNormals,
     materials: preparedClusters.map(cluster => cluster.material),
     clusters: preparedClusters,
     bounds: compactMinMeshBounds(storage),
@@ -1358,11 +1367,14 @@ class MinMesh {
     const clusters = this.clusters;
     const buckets = Array.from({ length: clusters.length }, () => []);
     const shadowBuckets = Array.from({ length: clusters.length }, () => []);
-    for (const face of this.faces) {
+    const faceBuckets = Array.from({ length: clusters.length }, () => []);
+    for (let faceIndex = 0; faceIndex < this.faces.length; faceIndex++) {
+      const face = this.faces[faceIndex];
       if (face.cluster <= 0 || face.cluster >= buckets.length || face.count < 3) continue;
       for (let index = 2; index < face.count; index++) {
         buckets[face.cluster].push(face.vertices[0], face.vertices[index - 1], face.vertices[index]);
         shadowBuckets[face.cluster].push(face.flags & 1 ? 0 : 1);
+        faceBuckets[face.cluster].push(faceIndex);
       }
     }
     const indexCount = buckets.reduce((sum, bucket) => sum + bucket.length, 0);
@@ -1377,9 +1389,11 @@ class MinMesh {
       cursor += bucket.length;
     }
     const shadowTriangleMask = new Uint8Array(indexCount / 3);
+    const shadowFaceMap = new Uint32Array(indexCount / 3);
     cursor = 0;
     for (let clusterIndex = 1; clusterIndex < shadowBuckets.length; clusterIndex++) {
       shadowTriangleMask.set(shadowBuckets[clusterIndex], cursor);
+      shadowFaceMap.set(faceBuckets[clusterIndex], cursor);
       cursor += shadowBuckets[clusterIndex].length;
     }
     const bounds = this.bounds();
@@ -1389,7 +1403,14 @@ class MinMesh {
     const geometry = {
       kind: 'indexed-geometry', sourceKind: this.kind,
       positions, normals, tangents, uv0, uv1, uvs: uv0, colors, indices,
-      boneWeights, boneIndices, groups, shadowVertexMap, shadowTriangleMask,
+      boneWeights, boneIndices, groups, shadowVertexMap, shadowTriangleMask, shadowFaceMap,
+      shadowFaceNormals: (() => {
+        const values = new Float32Array(this.faces.length * 3);
+        for (let index = 0; index < this.faces.length; index++) {
+          values.set(this.faces[index].normal.subarray(0, 3), index * 3);
+        }
+        return values;
+      })(),
       materials: preparedClusters.map(cluster => cluster.material), clusters: preparedClusters,
       bounds, vertexCount: count, indexCount, triangleCount: indexCount / 3,
     };

@@ -146,7 +146,9 @@ assert.equal(new Set(cube.prepare().shadowVertexMap).size, 8,
 const cubeShadow = D.prepareShadowTopology(D.normalizePreparedGeometry(cube));
 assert.equal(cubeShadow.positions.length / 3, 8);
 assert.equal(cubeShadow.faces.length / 3, 12);
-assert.equal(cubeShadow.edges.length, 18, 'twelve cube edges plus six face diagonals');
+assert.equal(cubeShadow.polygonCount, 6, 'one shadow plane per source quad, not per fan triangle');
+assert.equal(cubeShadow.edges.length, 12,
+  'EngMesh walks each polygon perimeter, so a quad fan diagonal is never a silhouette edge');
 assert.equal(cubeShadow.boundaryEdges, 0);
 assert.equal(cubeShadow.nonManifoldEdges, 0);
 assert.equal(cubeShadow.windingConflictEdges, 0);
