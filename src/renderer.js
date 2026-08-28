@@ -4645,11 +4645,16 @@ class Renderer {
     }
     gl.uniform4fv(uniforms['uMaterialColors[0]'], materialColors);
     gl.uniform1f(uniforms.uAlphaCutoff, view.alphaCutoff || -1);
-    gl.uniform1f(uniforms.uSpecularPower, view.specularPower || 8);
     const specularColor = colorRGB(view.specularColor >>> 0, scratch.specularColor);
+    // sMaterial20Light::Set writes pc[1].w = Para.SpecularPow before the "2x
+    // intensity" branch, and sVector::Scale4 scales w along with xyz, so the
+    // exponent material20_light.psh feeds to pow() is doubled with the color.
+    let specularPower = view.specularPower || 8;
     if (lightScale !== 1) {
       specularColor[0] *= lightScale; specularColor[1] *= lightScale; specularColor[2] *= lightScale;
+      specularPower *= lightScale;
     }
+    gl.uniform1f(uniforms.uSpecularPower, specularPower);
     gl.uniform3fv(uniforms.uSpecularColor, specularColor);
     gl.uniform1f(uniforms.uSpecularStrength, view.specularStrength || 0);
     const ambient = colorRGB(viewport.ambientLight >>> 0, scratch.ambient);
