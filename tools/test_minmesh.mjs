@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { CLASS_REGISTRY } from '../src/classes.js';
 import * as BitmapAPI from '../src/bitmap.js';
 import * as CoreAPI from '../src/core.js';
+import { FONT3D_FAMILIES } from '../src/font3d_glyphs.js';
 import { parseKX } from '../src/kx.js';
 import * as MeshAPI from '../src/mesh.js';
 import { Mesh_ToMin, meshToMinHandlers } from '../src/mesh_to_min.js';
@@ -685,18 +686,35 @@ assert.equal(text.vertices.length, 16);
 assert.equal(text.prepare().triangleCount, 12);
 
 // Debris' authored Arial/Georgia subset is vector data, not a browser Canvas
-// result. Arimo/Gelasio retain the original horizontal metrics while the GDI
-// positive-height cell denominators preserve native vertical/advance scaling.
+// result. Arimo/Gelasio retain the original horizontal metrics while compact
+// reference bounds fit the tessellated glyphs to their Windows bearings and
+// visible size without changing topology.
 const arialGlyph = D.font3DVectorGlyph('arial', 1, 0.04998779296875, 'a');
 const georgiaGlyph = D.font3DVectorGlyph('georgia', 1, 0.04998779296875, 'a');
 assert.equal(arialGlyph.advance, 1139 / 2288);
 assert.equal(georgiaGlyph.advance, 1032 / 2327);
+assert.deepEqual(arialGlyph.referenceBounds, [74, -24, 1052, 1086]);
+assert.deepEqual(georgiaGlyph.referenceBounds, [80, -25, 1006, 1014]);
 assert.equal(D.font3DGlyphAdvance(arialGlyph, 1), 64 / 128);
 assert.equal(D.font3DGlyphAdvance(georgiaGlyph, 1), 57 / 128);
 assert.equal(D.font3DGlyphAdvance(arialGlyph, 0.5), 32 / 128);
 assert.equal(D.font3DGlyphAdvance(arialGlyph, 0.501), 32 / 128,
   'CreateFontA truncates the requested logical height before metric scaling');
 assert.ok(arialGlyph.deterministic && georgiaGlyph.deterministic);
+
+for (const [family, data] of Object.entries(FONT3D_FAMILIES)) {
+  const heights = family === 'arial' ? [0.5, 1] : [1];
+  for (const height of heights) for (const [character, reference] of
+    Object.entries(data.referenceBounds)) {
+    const mesh = D.MinMesh_Font3D(height, 0, 0.04998779296875, character, family);
+    const bounds = mesh.bounds(), logicalHeight = Math.trunc(height * 128);
+    const expected = reference.map(value =>
+      D.font3DPointFXCoordinate(value, data.unitsPerCell, logicalHeight));
+    assert.deepEqual([
+      bounds.minimum[0], bounds.minimum[1], bounds.maximum[0], bounds.maximum[1],
+    ], expected, `${family} ${JSON.stringify(character)} matches its Windows outline bounds`);
+  }
+}
 
 // GGO_UNHINTED points still cross a signed 16.16 POINTFX boundary, are divided
 // by the native 128-unit scale, and are stored as Float32 before subdivision.
@@ -767,8 +785,16 @@ try {
 const deterministicArialGeometry = deterministicArial.prepare();
 const repeatedDeterministicArialGeometry = repeatedDeterministicArial.prepare();
 assert.ok(Math.abs(deterministicArial.bounds().maximum[0] -
-  (4 * 64 / 128 + D.font3DPointFXCoordinate(382, 2288, 128))) < 1e-6,
+  (4 * 64 / 128 + D.font3DPointFXCoordinate(391, 2288, 128))) < 1e-6,
   'Font3D accumulates native integer gmCellIncX positions before /128');
+assert.deepEqual([
+  deterministicArial.bounds().minimum[1], deterministicArial.bounds().maximum[1],
+], [
+  D.font3DPointFXCoordinate(-24, 2288, 128),
+  D.font3DPointFXCoordinate(1466, 2288, 128),
+], 'Font3D fits the final Windows glyph bounds after native tessellation');
+assert.deepEqual([deterministicArial.vertices.length, deterministicArial.faces.length], [804, 587],
+  'bounds fitting preserves the established Font3D topology and face order');
 for (const vertex of deterministicArial.vertices) {
   assert.equal(vertex.uv[0][0], Math.fround(vertex.position[0] + vertex.position[2]));
   assert.equal(vertex.uv[0][1], vertex.position[1]);

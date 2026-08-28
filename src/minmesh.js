@@ -3012,6 +3012,7 @@ function font3DVectorGlyph(family, height, maxError, character) {
     advance: record[0] / source.unitsPerCell,
     advanceUnits: record[0],
     unitsPerCell: source.unitsPerCell,
+    referenceBounds: source.referenceBounds?.[character] || null,
     contours,
     deterministic: true,
   };
@@ -3041,6 +3042,41 @@ function font3DGlyphAdvance(glyph, height) {
     return Math.round(glyph.advanceUnits * logicalHeight / glyph.unitsPerCell) / 128;
   }
   return (Number(glyph?.advance) || 0) * height;
+}
+
+function fitFont3DGlyphVertexRange(mesh, fit, height) {
+  const { firstVertex, endVertex, offsetX, referenceBounds, unitsPerCell } = fit;
+  if (!(endVertex > firstVertex) || !Array.isArray(referenceBounds) ||
+      referenceBounds.length !== 4 || !(unitsPerCell > 0)) return false;
+  let sourceMinX = Infinity, sourceMinY = Infinity;
+  let sourceMaxX = -Infinity, sourceMaxY = -Infinity;
+  for (let index = firstVertex; index < endVertex; index++) {
+    const position = mesh.vertices[index].position;
+    sourceMinX = Math.min(sourceMinX, position[0]);
+    sourceMinY = Math.min(sourceMinY, position[1]);
+    sourceMaxX = Math.max(sourceMaxX, position[0]);
+    sourceMaxY = Math.max(sourceMaxY, position[1]);
+  }
+  if (!(sourceMaxX > sourceMinX) || !(sourceMaxY > sourceMinY)) return false;
+  const logicalHeight = Math.trunc(Math.max(0, f32(Number(height) || 0)) * FONT3D_NATIVE_SCALE);
+  const targetMinX = f32(offsetX +
+    font3DPointFXCoordinate(referenceBounds[0], unitsPerCell, logicalHeight));
+  const targetMinY = font3DPointFXCoordinate(referenceBounds[1], unitsPerCell, logicalHeight);
+  const targetMaxX = f32(offsetX +
+    font3DPointFXCoordinate(referenceBounds[2], unitsPerCell, logicalHeight));
+  const targetMaxY = font3DPointFXCoordinate(referenceBounds[3], unitsPerCell, logicalHeight);
+  const mapCoordinate = (value, sourceMin, sourceMax, targetMin, targetMax) => {
+    if (value === sourceMin) return targetMin;
+    if (value === sourceMax) return targetMax;
+    return f32(targetMin + (value - sourceMin) *
+      (targetMax - targetMin) / (sourceMax - sourceMin));
+  };
+  for (let index = firstVertex; index < endVertex; index++) {
+    const position = mesh.vertices[index].position;
+    position[0] = mapCoordinate(position[0], sourceMinX, sourceMaxX, targetMinX, targetMaxX);
+    position[1] = mapCoordinate(position[1], sourceMinY, sourceMaxY, targetMinY, targetMaxY);
+  }
+  return true;
 }
 
 function font3DResolution(maxError) {
@@ -3150,6 +3186,7 @@ function canvasFont3D(height, extrude, maxError, text, font) {
   const family = font3DFamily(font), resolution = font3DResolution(maxError);
   const deterministicFamily = FONT3D_FAMILIES[family.toLowerCase()] || null;
   const mesh = new MinMesh();
+  const deterministicFits = [];
   const tessellator = createFontGLUTessellator(mesh, FONT_MASK_TRIANGLE_LIMIT);
   if (!tessellator) return null;
   let x = 0;
@@ -3165,16 +3202,31 @@ function canvasFont3D(height, extrude, maxError, text, font) {
     }
     const resolvedGlyph = glyph || canvasFont3DGlyph(family, resolution, maxError, character);
     if (!resolvedGlyph) { tessellator.destroy(); return null; }
+    const firstVertex = mesh.vertices.length;
     if (resolvedGlyph.contours.length && !appendFontGLUContours(mesh, resolvedGlyph.contours, {
       scale: resolvedGlyph.deterministic ? 1 : height,
       offsetX: x, triangleLimit: FONT_MASK_TRIANGLE_LIMIT,
     }, tessellator)) {
       tessellator.destroy(); return null;
     }
+    if (resolvedGlyph.deterministic && resolvedGlyph.contours.length) {
+      deterministicFits.push({
+        firstVertex,
+        endVertex: mesh.vertices.length,
+        offsetX: x,
+        referenceBounds: resolvedGlyph.referenceBounds,
+        unitsPerCell: resolvedGlyph.unitsPerCell,
+      });
+    }
     x += font3DGlyphAdvance(resolvedGlyph, height);
   }
   tessellator.destroy();
   if (!cleanFontGLUTriangles(mesh)) return null;
+  // Bounds-only affine fitting retains the libre contours while matching the
+  // Arial/Georgia bearings and visible size used by the Windows production.
+  // Keep this after GLU and the native edge-flip pass so vertex/face ordering
+  // (and therefore Explode's RNG assignment) remains bit-identical.
+  for (const fit of deterministicFits) if (!fitFont3DGlyphVertexRange(mesh, fit, height)) return null;
   if (!extrudeFontSurface(mesh, extrude)) return null;
   projectFontUVs(mesh);
   return mesh.invalidate();

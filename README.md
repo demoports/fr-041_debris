@@ -46,9 +46,10 @@ through a bounded transferable queue, allowing texture and geometry generation
 to continue without blocking audio delivery. The loader is disposed before the
 seekable main-song synthesizer is created.
 
-Font3D geometry uses deterministic metric-compatible Arimo and Gelasio subsets
-and a plain-JavaScript GLU tessellator port. This avoids host-font rasterization
-differences while keeping the geometry procedural.
+Font3D geometry uses deterministic Arimo and Gelasio subsets fitted to the
+original Arial and Georgia advances and glyph bounds, plus a plain-JavaScript
+GLU tessellator port. This avoids host-font rasterization differences while
+keeping the geometry procedural.
 
 ## Repository structure
 
@@ -99,9 +100,10 @@ The detailed evidence and reproducibility data live in:
 - Format-9 textures use a plain-JavaScript port of the released quality-0 DXT5
   encoder. Browsers with S3TC upload the BC3 chain directly; other browsers
   decode the same blocks to RGBA8 before upload.
-- Font3D is deterministic, but the open Arimo/Gelasio outlines are substitutes
-  for proprietary XP-era Arial/Georgia glyph points. The separate bitmap-text
-  path still obtains its fonts from browser Canvas and can vary by platform.
+- Font3D is deterministic and matches the original font metrics and bounds, but
+  its open Arimo/Gelasio contours substitute for proprietary XP-era
+  Arial/Georgia glyph points. The separate bitmap-text path still obtains its
+  fonts from browser Canvas and can vary by platform.
 - Both embedded V2M songs follow the pinned V2Redux sequencer and DSP. If a
   browser cannot create a 44.1 kHz AudioContext, only the final stereo stream is
   resampled; production timing remains at 44.1 kHz.
