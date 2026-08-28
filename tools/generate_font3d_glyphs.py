@@ -25,10 +25,14 @@ FAMILIES = (
         "commit": "4a6255f269916ae7ad3fc2706b0935e7621396b8",
         "argument": "arimo",
         "characters": ".adefhlmnoprstuvw",
+        "units_per_em": 2048,
         # CreateFontA receives a positive height. Windows maps that to the
         # Arial character-cell height (usWinAscent + usWinDescent), not to the
         # TrueType em square.
         "units_per_cell": 2288,
+        # CreateFontA selects these integer pixels-per-em values through
+        # Arial 2.82's VDMX table for the two heights authored by Debris.
+        "ppem_by_logical_height": {64: 55, 128: 114},
         # Reusable bounds only, not Microsoft outline points. Arial 2.82 and
         # 5.01 have identical bounds for this production subset.
         "reference_bounds": {
@@ -58,7 +62,11 @@ FAMILIES = (
         "commit": "7ab20e7e5c42791e603b9ee3201a0b49849cfdb2",
         "argument": "gelasio",
         "characters": " .abcdefghiklmnopqrstuvwxy",
+        "units_per_em": 2048,
         "units_per_cell": 2327,
+        # Georgia 2.05's VDMX table has two consecutive 128-cell records;
+        # Windows/Wine select the first one, at 112 ppem.
+        "ppem_by_logical_height": {128: 112},
         # Georgia 2.05 and 5.00 likewise retain these subset bounds.
         "reference_bounds": {
             ".": [141, -20, 415, 252],
@@ -121,7 +129,7 @@ def load_font(path, description):
             f"{path} has SHA-256 {digest}; expected {description['sha256']}"
         )
     font = TTFont(path, lazy=False)
-    if font["head"].unitsPerEm != 2048:
+    if font["head"].unitsPerEm != description["units_per_em"]:
         raise ValueError(f"{path} has unexpected {font['head'].unitsPerEm} units/em")
     return font
 
@@ -146,7 +154,9 @@ def main():
         print(f"    source: {quoted(description['source'])},")
         print(f"    sourceCommit: {quoted(description['commit'])},")
         print(f"    sourceSHA256: {quoted(description['sha256'])},")
+        print(f"    unitsPerEm: {description['units_per_em']},")
         print(f"    unitsPerCell: {description['units_per_cell']},")
+        print(f"    ppemByLogicalHeight: {quoted(description['ppem_by_logical_height'])},")
         print(f"    referenceBounds: {quoted(description['reference_bounds'])},")
         print("    glyphs: {")
         for index, character in enumerate(description["characters"]):

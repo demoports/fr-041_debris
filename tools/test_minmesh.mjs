@@ -690,15 +690,19 @@ assert.equal(text.prepare().triangleCount, 12);
 // reference bounds fit the tessellated glyphs to their Windows bearings and
 // visible size without changing topology.
 const arialGlyph = D.font3DVectorGlyph('arial', 1, 0.04998779296875, 'a');
+const halfArialGlyph = D.font3DVectorGlyph('arial', 0.5, 0.04998779296875, 'a');
 const georgiaGlyph = D.font3DVectorGlyph('georgia', 1, 0.04998779296875, 'a');
 assert.equal(arialGlyph.advance, 1139 / 2288);
 assert.equal(georgiaGlyph.advance, 1032 / 2327);
 assert.deepEqual(arialGlyph.referenceBounds, [74, -24, 1052, 1086]);
 assert.deepEqual(georgiaGlyph.referenceBounds, [80, -25, 1006, 1014]);
+assert.equal(arialGlyph.ppem, 114);
+assert.equal(halfArialGlyph.ppem, 55);
+assert.equal(georgiaGlyph.ppem, 112);
 assert.equal(D.font3DGlyphAdvance(arialGlyph, 1), 64 / 128);
 assert.equal(D.font3DGlyphAdvance(georgiaGlyph, 1), 57 / 128);
-assert.equal(D.font3DGlyphAdvance(arialGlyph, 0.5), 32 / 128);
-assert.equal(D.font3DGlyphAdvance(arialGlyph, 0.501), 32 / 128,
+assert.equal(D.font3DGlyphAdvance(halfArialGlyph, 0.5), 31 / 128);
+assert.equal(D.font3DGlyphAdvance(halfArialGlyph, 0.501), 31 / 128,
   'CreateFontA truncates the requested logical height before metric scaling');
 assert.ok(arialGlyph.deterministic && georgiaGlyph.deterministic);
 
@@ -707,25 +711,29 @@ for (const [family, data] of Object.entries(FONT3D_FAMILIES)) {
   for (const height of heights) for (const [character, reference] of
     Object.entries(data.referenceBounds)) {
     const mesh = D.MinMesh_Font3D(height, 0, 0.04998779296875, character, family);
-    const bounds = mesh.bounds(), logicalHeight = Math.trunc(height * 128);
+    const bounds = mesh.bounds();
+    const glyph = D.font3DVectorGlyph(family, height, 0.04998779296875, character);
     const expected = reference.map(value =>
-      D.font3DPointFXCoordinate(value, data.unitsPerCell, logicalHeight));
+      D.font3DPointFXCoordinate(value, glyph.coordinateUnits, glyph.coordinatePpem));
     assert.deepEqual([
       bounds.minimum[0], bounds.minimum[1], bounds.maximum[0], bounds.maximum[1],
     ], expected, `${family} ${JSON.stringify(character)} matches its Windows outline bounds`);
   }
 }
 
-// GGO_UNHINTED points still cross a signed 16.16 POINTFX boundary, are divided
-// by the native 128-unit scale, and are stored as Float32 before subdivision.
-const expectedPositiveFixed = Math.round(37 * 128 * 65536 / 1000);
-const expectedNegativeFixed = -Math.round(37 * 128 * 65536 / 1000);
+// GGO_UNHINTED points cross FreeType's signed 26.6 grid, whose six fractional
+// bits Wine repeats into POINTFX 16.16 before native /128 and Float32 storage.
+function expectedFont3DPointFX(value, unitsPerEm, ppem) {
+  const fixed26_6 = Math.round(value * ppem * 64 / unitsPerEm);
+  const integer = fixed26_6 >> 6;
+  let fraction = (fixed26_6 & 0x3f) << 10;
+  fraction |= (fraction >> 6) | (fraction >> 12);
+  return Math.fround(Math.fround(integer + fraction / 65536) / 128);
+}
 assert.equal(D.font3DPointFXCoordinate(37, 1000, 128),
-  Math.fround(expectedPositiveFixed / (65536 * 128)));
+  expectedFont3DPointFX(37, 1000, 128));
 assert.equal(D.font3DPointFXCoordinate(-37, 1000, 128),
-  Math.fround(expectedNegativeFixed / (65536 * 128)));
-assert.ok(Number.isInteger(D.font3DPointFXCoordinate(37, 1000, 128) * 65536 * 128),
-  'POINTFX-derived production coordinates remain on the 16.16 / 128 grid');
+  expectedFont3DPointFX(-37, 1000, 128));
 
 // A unit quadratic has exactly the native recursive midpoint subdivision
 // counts at these two tolerances: 8 and 16 segments, plus the starting point.
@@ -740,9 +748,9 @@ const irregularF32Curve = D.flattenFont3DContour([
   37, 11, 1, 413, 997, 0, 991, -23, 1, 750, -311, 1,
 ], 1000, 1, 0.5);
 assert.deepEqual(irregularF32Curve.slice(0, 3), [
-  [0.03699994087219238, 0.01100003719329834],
-  [0.13415619730949402, 0.2261562943458557],
-  [0.23762495815753937, 0.3786250352859497],
+  [0.037078261375427246, 0.01103663444519043],
+  [0.13423267006874084, 0.22619041800498962],
+  [0.23769985139369965, 0.3786581754684448],
 ], 'irregular POINTFX curve retains native single-precision subdivision points');
 
 // TrueType contours may begin off-curve. Cover both native start rules: reuse
@@ -785,14 +793,22 @@ try {
 const deterministicArialGeometry = deterministicArial.prepare();
 const repeatedDeterministicArialGeometry = repeatedDeterministicArial.prepare();
 assert.ok(Math.abs(deterministicArial.bounds().maximum[0] -
-  (4 * 64 / 128 + D.font3DPointFXCoordinate(391, 2288, 128))) < 1e-6,
+  (4 * 64 / 128 + D.font3DPointFXCoordinate(391, 2048, 114))) < 1e-6,
   'Font3D accumulates native integer gmCellIncX positions before /128');
 assert.deepEqual([
   deterministicArial.bounds().minimum[1], deterministicArial.bounds().maximum[1],
 ], [
-  D.font3DPointFXCoordinate(-24, 2288, 128),
-  D.font3DPointFXCoordinate(1466, 2288, 128),
+  D.font3DPointFXCoordinate(-24, 2048, 114),
+  D.font3DPointFXCoordinate(1466, 2048, 114),
 ], 'Font3D fits the final Windows glyph bounds after native tessellation');
+
+let andromedaAdvance = 0;
+for (const character of 'andromedasoftwaredevelopment.') {
+  const glyph = D.font3DVectorGlyph('arial', 0.5, 0.04998779296875, character);
+  andromedaAdvance += D.font3DGlyphAdvance(glyph, 0.5);
+}
+assert.equal(andromedaAdvance * 128, 830,
+  'the intact Andromeda greeting uses Arial 2.82 VDMX and integer GDI advances');
 assert.deepEqual([deterministicArial.vertices.length, deterministicArial.faces.length], [804, 587],
   'bounds fitting preserves the established Font3D topology and face order');
 for (const vertex of deterministicArial.vertices) {

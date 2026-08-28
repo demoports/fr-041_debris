@@ -2893,14 +2893,16 @@ function roundFont3DFixed(value) {
   return value < 0 ? Math.ceil(value - 0.5) : Math.floor(value + 0.5);
 }
 
-// GGO_UNHINTED still returns POINTFX 16.16 coordinates at the selected
-// integer logical height. POINTFX::toVector then divides by 128 and stores the
-// result in GenMinVector's sF32 fields before GLU sees it.
-function font3DPointFXCoordinate(value, unitsPerCell, logicalHeight) {
-  if (!(unitsPerCell > 0) || !(logicalHeight > 0)) return 0;
-  const full = roundFont3DFixed(
-    Number(value) * logicalHeight * FONT3D_POINTFX_SCALE / unitsPerCell,
-  );
+// GGO_UNHINTED returns FreeType/GDI native outline points on a 26.6 grid.
+// Wine expands the six fractional bits into POINTFX 16.16 by repetition, just
+// as Windows does, before the original operator divides the result by 128.
+function font3DPointFXCoordinate(value, unitsPerEm, ppem) {
+  if (!(unitsPerEm > 0) || !(ppem > 0)) return 0;
+  const fixed26_6 = roundFont3DFixed(Number(value) * ppem * 64 / unitsPerEm);
+  const integer = fixed26_6 >> 6;
+  let fraction = (fixed26_6 & 0x3f) << 10;
+  fraction |= (fraction >> 6) | (fraction >> 12);
+  const full = integer * FONT3D_POINTFX_SCALE + fraction;
   const logical = f32(f32(full) / f32(FONT3D_POINTFX_SCALE));
   return f32(logical / f32(FONT3D_NATIVE_SCALE));
 }
@@ -2940,15 +2942,16 @@ function appendFont3DQuadratic(output, start, control, end, toleranceSq, depth =
 
 // Decode a cyclic TrueType point stream and flatten its quadratic segments
 // with the exact midpoint test used by font3DAddCurve in genminmesh.cpp.
-function flattenFont3DContour(encoded, unitsPerCell, height, maxError) {
+function flattenFont3DContour(encoded, unitsPerEm, height, maxError, ppem = null) {
   if (!Array.isArray(encoded) || encoded.length < 9 || encoded.length % 3) return [];
   height = Math.max(0, f32(Number(height) || 0));
   const logicalHeight = Math.trunc(height * FONT3D_NATIVE_SCALE);
+  const coordinatePpem = ppem == null ? logicalHeight : Number(ppem);
   const points = [];
   for (let index = 0; index < encoded.length; index += 3) {
     points.push([
-      font3DPointFXCoordinate(encoded[index], unitsPerCell, logicalHeight),
-      font3DPointFXCoordinate(encoded[index + 1], unitsPerCell, logicalHeight),
+      font3DPointFXCoordinate(encoded[index], unitsPerEm, coordinatePpem),
+      font3DPointFXCoordinate(encoded[index + 1], unitsPerEm, coordinatePpem),
       Boolean(encoded[index + 2]),
     ]);
   }
@@ -3002,16 +3005,31 @@ function font3DVectorGlyph(family, height, maxError, character) {
     font3DVectorGlyphCache.delete(key); font3DVectorGlyphCache.set(key, cached);
     return cached;
   }
+  const logicalHeight = Math.trunc(height * FONT3D_NATIVE_SCALE);
+  const selectedPpem = Number(source.ppemByLogicalHeight?.[logicalHeight]);
+  const gdiSized = selectedPpem > 0;
+  // The three authored family/height pairs use the exact integer ppem chosen
+  // by Arial 2.82/Georgia 2.05's VDMX tables. Retain continuous cell-height
+  // scaling only as a deterministic fallback for unauthored sizes.
+  const coordinateUnits = gdiSized ? source.unitsPerEm : source.unitsPerCell;
+  const coordinatePpem = gdiSized ? selectedPpem : logicalHeight;
   const contours = [];
   for (const contour of record[1]) {
-    const flattened = flattenFont3DContour(contour, source.unitsPerCell, height, maxError);
+    const flattened = flattenFont3DContour(
+      contour, coordinateUnits, height, maxError, coordinatePpem,
+    );
     if (!flattened) throw new Error(`Font3D deterministic ${familyKey} glyph exceeds curve limit`);
     if (flattened.length >= 3) contours.push(flattened);
   }
   const glyph = {
     advance: record[0] / source.unitsPerCell,
     advanceUnits: record[0],
+    unitsPerEm: source.unitsPerEm,
     unitsPerCell: source.unitsPerCell,
+    coordinateUnits,
+    coordinatePpem,
+    gdiSized,
+    ppem: gdiSized ? selectedPpem : null,
     referenceBounds: source.referenceBounds?.[character] || null,
     contours,
     deterministic: true,
@@ -3038,16 +3056,27 @@ function font3DGlyphAdvance(glyph, height) {
     // operator creates a height*128 font and divides the accumulated xPos by
     // 128, so retain that 1/128-unit quantization instead of accumulating
     // floating Canvas widths.
-    const logicalHeight = Math.trunc(height * 128);
-    return Math.round(glyph.advanceUnits * logicalHeight / glyph.unitsPerCell) / 128;
+    if (glyph.gdiSized) {
+      // FreeType first rounds the unhinted design advance onto its 26.6 grid;
+      // GetGlyphOutline then rounds that positive value up to gmCellIncX.
+      const advance26_6 = roundFont3DFixed(
+        glyph.advanceUnits * glyph.ppem * 64 / glyph.unitsPerEm,
+      );
+      return Math.ceil(advance26_6 / 64) / FONT3D_NATIVE_SCALE;
+    }
+    const logicalHeight = Math.trunc(height * FONT3D_NATIVE_SCALE);
+    return Math.round(glyph.advanceUnits * logicalHeight / glyph.unitsPerCell) /
+      FONT3D_NATIVE_SCALE;
   }
   return (Number(glyph?.advance) || 0) * height;
 }
 
-function fitFont3DGlyphVertexRange(mesh, fit, height) {
-  const { firstVertex, endVertex, offsetX, referenceBounds, unitsPerCell } = fit;
+function fitFont3DGlyphVertexRange(mesh, fit) {
+  const {
+    firstVertex, endVertex, offsetX, referenceBounds, coordinateUnits, coordinatePpem,
+  } = fit;
   if (!(endVertex > firstVertex) || !Array.isArray(referenceBounds) ||
-      referenceBounds.length !== 4 || !(unitsPerCell > 0)) return false;
+      referenceBounds.length !== 4 || !(coordinateUnits > 0) || !(coordinatePpem > 0)) return false;
   let sourceMinX = Infinity, sourceMinY = Infinity;
   let sourceMaxX = -Infinity, sourceMaxY = -Infinity;
   for (let index = firstVertex; index < endVertex; index++) {
@@ -3058,13 +3087,12 @@ function fitFont3DGlyphVertexRange(mesh, fit, height) {
     sourceMaxY = Math.max(sourceMaxY, position[1]);
   }
   if (!(sourceMaxX > sourceMinX) || !(sourceMaxY > sourceMinY)) return false;
-  const logicalHeight = Math.trunc(Math.max(0, f32(Number(height) || 0)) * FONT3D_NATIVE_SCALE);
   const targetMinX = f32(offsetX +
-    font3DPointFXCoordinate(referenceBounds[0], unitsPerCell, logicalHeight));
-  const targetMinY = font3DPointFXCoordinate(referenceBounds[1], unitsPerCell, logicalHeight);
+    font3DPointFXCoordinate(referenceBounds[0], coordinateUnits, coordinatePpem));
+  const targetMinY = font3DPointFXCoordinate(referenceBounds[1], coordinateUnits, coordinatePpem);
   const targetMaxX = f32(offsetX +
-    font3DPointFXCoordinate(referenceBounds[2], unitsPerCell, logicalHeight));
-  const targetMaxY = font3DPointFXCoordinate(referenceBounds[3], unitsPerCell, logicalHeight);
+    font3DPointFXCoordinate(referenceBounds[2], coordinateUnits, coordinatePpem));
+  const targetMaxY = font3DPointFXCoordinate(referenceBounds[3], coordinateUnits, coordinatePpem);
   const mapCoordinate = (value, sourceMin, sourceMax, targetMin, targetMax) => {
     if (value === sourceMin) return targetMin;
     if (value === sourceMax) return targetMax;
@@ -3215,7 +3243,8 @@ function canvasFont3D(height, extrude, maxError, text, font) {
         endVertex: mesh.vertices.length,
         offsetX: x,
         referenceBounds: resolvedGlyph.referenceBounds,
-        unitsPerCell: resolvedGlyph.unitsPerCell,
+        coordinateUnits: resolvedGlyph.coordinateUnits,
+        coordinatePpem: resolvedGlyph.coordinatePpem,
       });
     }
     x += font3DGlyphAdvance(resolvedGlyph, height);
@@ -3226,7 +3255,7 @@ function canvasFont3D(height, extrude, maxError, text, font) {
   // Arial/Georgia bearings and visible size used by the Windows production.
   // Keep this after GLU and the native edge-flip pass so vertex/face ordering
   // (and therefore Explode's RNG assignment) remains bit-identical.
-  for (const fit of deterministicFits) if (!fitFont3DGlyphVertexRange(mesh, fit, height)) return null;
+  for (const fit of deterministicFits) if (!fitFont3DGlyphVertexRange(mesh, fit)) return null;
   if (!extrudeFontSurface(mesh, extrude)) return null;
   projectFontUVs(mesh);
   return mesh.invalidate();

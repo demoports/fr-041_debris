@@ -1,0 +1,156 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Debris Font3D Canvas metrics audit</title>
+<style>
+  html { color-scheme: dark; background: #111; color: #eee; font: 12px/1.35 monospace; }
+  body { margin: 16px; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+</style>
+<pre id="report">measuring…</pre>
+<script type="module">
+import { parseKX } from '../src/kx.js';
+import { FONT3D_FAMILIES } from '../src/font3d_glyphs.js';
+import {
+  MinMesh_Font3D, font3DGlyphAdvance, font3DVectorGlyph,
+} from '../src/minmesh.js';
+
+const FAMILY = {
+  arial: {
+    css: 'Arial', ...FONT3D_FAMILIES.arial,
+  },
+  georgia: {
+    css: 'Georgia', ...FONT3D_FAMILIES.georgia,
+  },
+};
+
+function normalizedFamily(value) {
+  return String(value || 'Arial').trim().replace(/\.+$/, '').toLowerCase();
+}
+
+function configure(context, family, pixels) {
+  context.font = `500 ${pixels}px "${family}"`;
+  context.textAlign = 'left';
+  context.textBaseline = 'alphabetic';
+  context.fillStyle = '#fff';
+  if ('fontKerning' in context) context.fontKerning = 'none';
+  if ('textRendering' in context) context.textRendering = 'geometricPrecision';
+}
+
+function scanBounds(pixels, width, height, threshold, originX, baseline) {
+  let minX = width, minY = height, maxX = -1, maxY = -1;
+  for (let y = 0, offset = 3; y < height; y++) {
+    for (let x = 0; x < width; x++, offset += 4) {
+      if (pixels[offset] < threshold) continue;
+      minX = Math.min(minX, x); minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    }
+  }
+  return maxX < minX ? null : [
+    minX - originX,
+    baseline - (maxY + 1),
+    maxX + 1 - originX,
+    baseline - minY,
+  ];
+}
+
+function canvasTextMetrics(text, familyKey, logicalHeight) {
+  const family = FAMILY[familyKey];
+  const cssPixels = family.ppemByLogicalHeight[logicalHeight] ||
+    logicalHeight * family.unitsPerEm / family.unitsPerCell;
+  let canvas = document.createElement('canvas');
+  let context = canvas.getContext('2d', { willReadFrequently: true });
+  configure(context, family.css, cssPixels);
+  // GetGlyphOutline returns an integer gmCellIncX for each separately queried
+  // glyph. Canvas is deliberately measured character-by-character as well:
+  // no whole-string shaping, kerning, ligatures, or fractional accumulation.
+  const advances = Array.from(text, character =>
+    Math.ceil(context.measureText(character).width));
+  const advance = advances.reduce((sum, value) => sum + value, 0);
+  const padding = 32;
+  const baseline = Math.ceil(cssPixels * 1.6) + padding;
+  const width = Math.max(1, advance + padding * 2 + Math.ceil(cssPixels));
+  const height = Math.max(1, baseline + Math.ceil(cssPixels) + padding);
+  canvas.width = width; canvas.height = height;
+  context = canvas.getContext('2d', { willReadFrequently: true });
+  configure(context, family.css, cssPixels);
+  let x = padding;
+  for (let index = 0; index < text.length; index++) {
+    context.fillText(text[index], x, baseline);
+    x += advances[index];
+  }
+  const image = context.getImageData(0, 0, width, height);
+  return {
+    available: document.fonts.check(`500 ${Math.max(1, cssPixels)}px "${family.css}"`),
+    cssPixels,
+    advance,
+    boundsAlpha1: scanBounds(image.data, width, height, 1, padding, baseline),
+    boundsAlpha128: scanBounds(image.data, width, height, 128, padding, baseline),
+  };
+}
+
+try {
+  await document.fonts.ready;
+  const bytes = new Uint8Array(await (await fetch('../assets/debris_party.kx')).arrayBuffer());
+  const operations = parseKX(bytes).operations.filter(operation => operation.classId === 0x0133);
+  const results = operations.map(operation => {
+    const [height, extrude, maxError] = operation.parameters;
+    const [text, font] = operation.strings;
+    const mesh = MinMesh_Font3D(height, extrude, maxError, text, font);
+    const bounds = mesh.bounds();
+    const currentBounds = [
+      bounds.minimum[0] * 128, bounds.minimum[1] * 128,
+      bounds.maximum[0] * 128, bounds.maximum[1] * 128,
+    ];
+    mesh.releaseStorage();
+    const logicalHeight = Math.trunc(Math.max(height, 8 / 128) * 128);
+    const intendedFamily = normalizedFamily(font);
+    let currentAdvance = 0;
+    for (const character of text) {
+      const glyph = font3DVectorGlyph(intendedFamily, height, maxError, character);
+      currentAdvance += font3DGlyphAdvance(glyph, height) * 128;
+    }
+    const arial = canvasTextMetrics(text, 'arial', logicalHeight);
+    const georgia = canvasTextMetrics(text, 'georgia', logicalHeight);
+    const intended = intendedFamily === 'georgia' ? georgia : arial;
+    const boundsDeltaAlpha128 = intended.boundsAlpha128?.map(
+      (value, index) => currentBounds[index] - value,
+    ) || null;
+    return {
+      id: operation.id,
+      text,
+      font,
+      intendedFamily,
+      logicalHeight,
+      selectedPpem: intended.cssPixels,
+      currentAdvance,
+      currentBounds,
+      boundsDeltaAlpha128,
+      advanceDelta: currentAdvance - intended.advance,
+      arial,
+      georgia,
+    };
+  });
+  const absoluteValues = values => values.flatMap(value => value || []).map(Math.abs);
+  const report = {
+    calls: results.length,
+    fonts: Object.fromEntries(Object.entries(FAMILY).map(([key, family]) => [key, {
+      css: family.css,
+      available: document.fonts.check(`500 128px "${family.css}"`),
+    }])),
+    summary: {
+      maxIntendedAdvanceDelta: Math.max(...results.map(result => Math.abs(result.advanceDelta))),
+      maxIntendedAlpha128BoundsDelta: Math.max(
+        ...absoluteValues(results.map(result => result.boundsDeltaAlpha128)),
+      ),
+    },
+    results,
+  };
+  document.querySelector('#report').textContent = JSON.stringify(report, null, 2);
+  document.documentElement.dataset.font3dMetrics = JSON.stringify(report);
+  document.documentElement.dataset.webglSmoke = results.length === 29 ? 'ok' : 'failed';
+} catch (error) {
+  document.querySelector('#report').textContent = error.stack || String(error);
+  document.documentElement.dataset.webglError = error.stack || String(error);
+  document.documentElement.dataset.webglSmoke = 'failed';
+}
+</script>
