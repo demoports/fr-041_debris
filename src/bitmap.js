@@ -1488,9 +1488,12 @@ import { Random } from './core.js';
     }
     const shiftX = 14 - powerOfTwo(bitmap.width), shiftY = 14 - powerOfTwo(bitmap.height);
     const c0 = packedColor(color1), c1 = packedColor(color0), cb = packedColor(color2);
-    const aspect = Math.pow(2, aspectParameter);
-    const aspectFixed = aspect >= 1 ? trunc(65536 / (aspect * aspect)) : trunc(aspect * aspect * 65536);
-    const divisor = aspect >= 1 ? aspect / 16384 : 1 / (16384 * aspect);
+    // aspect, aspf and aspdiv are all sF32 in the released code.
+    const aspect = f32(Math.pow(2, aspectParameter));
+    const aspectFixed = aspect >= 1
+      ? trunc(f32(65536 / f32(aspect * aspect)))
+      : trunc(f32(f32(aspect * aspect) * 65536));
+    const divisor = aspect >= 1 ? f32(aspect / 16384) : f32(1 / f32(16384 * aspect));
     // Mode 2 overwrites the complete temporary pixel on every iteration.
     // Keep one scratch allocation rather than one per generated pixel.
     const cellColor = mode & 2 ? new Uint16Array(4) : null;
@@ -1513,12 +1516,14 @@ import { Random } from './core.js';
           if (distance < best) { second = best; best = distance; bestIndex = i; }
           else if (distance > best && distance < second) second = distance;
         }
-        let value = Math.sqrt(best) * divisor;
+        // v0 and v1 are sF32 locals, so each assignment rounds to single
+        // precision before the next step reads it (genbitmap.cpp:2881-2890).
+        let value = f32(Math.sqrt(best) * divisor);
         if (mode & 1) {
-          const v1 = Math.sqrt(second) * divisor;
-          value = value + v1 > 0.00001 ? (v1 - value) / (v1 + value) : 0;
+          const v1 = f32(Math.sqrt(second) * divisor);
+          value = f32(value + v1) > 0.00001 ? f32((v1 - value) / (v1 + value)) : 0;
         }
-        let fade = clamp15(Math.pow(value * amplitude, gamma) * 0x8000) * 2;
+        let fade = clamp15(f32(Math.pow(f32(value * amplitude), gamma)) * 0x8000) * 2;
         if (mode & 4) fade = 0x10000 - fade;
         const offset4 = (y * bitmap.width + x) * 4;
         if (mode & 2) {
@@ -1602,12 +1607,13 @@ import { Random } from './core.js';
               } else if (distance > best && distance < second) second = distance;
             }
 
-            let value = Math.sqrt(best) * divisor;
+            // Same sF32 narrowing as the scalar path above.
+            let value = f32(Math.sqrt(best) * divisor);
             if (mode & 1) {
-              const v1 = Math.sqrt(second) * divisor;
-              value = value + v1 > 0.00001 ? (v1 - value) / (v1 + value) : 0;
+              const v1 = f32(Math.sqrt(second) * divisor);
+              value = f32(value + v1) > 0.00001 ? f32((v1 - value) / (v1 + value)) : 0;
             }
-            let fade = clamp15(Math.pow(value * amplitude, gamma) * 0x8000) * 2;
+            let fade = clamp15(f32(Math.pow(f32(value * amplitude), gamma)) * 0x8000) * 2;
             if (mode & 4) fade = 0x10000 - fade;
             const offset4 = ((by + ty) * bitmap.width + bx + tx) * 4;
             if (mode & 2) {
