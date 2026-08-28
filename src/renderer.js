@@ -3127,7 +3127,7 @@ function prepareShadowTopology(geometry, groups = geometry.groups) {
     volumePositions[target + 2] = volumePositions[target + 5] = z;
     extrusions[index * 2 + 1] = 1;
   }
-  return {
+  const topology = {
     positions: new Float32Array(canonical),
     sourceIndices: new Uint32Array(canonicalSources),
     usesShadowVertexMap,
@@ -3143,6 +3143,61 @@ function prepareShadowTopology(geometry, groups = geometry.groups) {
     volumePositions,
     extrusions,
   };
+  // Animated GeometryCache entries already contain current BoneData on their
+  // first shadow draw. Native uses UpdatePlanes for that draw too, rather than
+  // the static planes prepared with the mesh job.
+  const positionsAreDynamic = geometry.dynamic &&
+    (!Array.isArray(geometry.dynamicAttributes) || geometry.dynamicAttributes.includes('positions'));
+  if (positionsAreDynamic && !refreshAnimatedShadowPlanes(topology)) {
+    throw new Error('animated shadow topology has inconsistent face data');
+  }
+  return topology;
+}
+
+function refreshAnimatedShadowPlanes(topology) {
+  // Bone-animated shadow jobs do not reuse the static face planes. Native
+  // EngMesh::Job::UpdatePlanes rebuilds one plane per FaceMap entry from that
+  // polygon's first current fan triangle whenever BoneData is present
+  // (engine.cpp:582-634, 1502-1505). Recompute from the refreshed/skinned
+  // positions here; using the authored GenMinFace normal or the static
+  // CalcFacePlane walk makes a bending polygon retain a stale shadow side.
+  const faces = topology.faces;
+  const trianglePolygon = topology.trianglePolygon;
+  const planes = topology.polygonPlanes;
+  const canonical = topology.positions;
+  if (!faces || !trianglePolygon || !planes || trianglePolygon.length !== faces.length / 3) {
+    return false;
+  }
+  planes.fill(0);
+  let previousPolygon = -1;
+  for (let triangle = 0; triangle < trianglePolygon.length; triangle++) {
+    const polygon = trianglePolygon[triangle];
+    if (polygon === previousPolygon) continue;
+    if (polygon >= planes.length / 4) return false;
+    previousPolygon = polygon;
+    const face = triangle * 3;
+    const ia = faces[face] * 3;
+    const ib = faces[face + 1] * 3;
+    const ic = faces[face + 2] * 3;
+    const d1x = f32(canonical[ib] - canonical[ia]);
+    const d1y = f32(canonical[ib + 1] - canonical[ia + 1]);
+    const d1z = f32(canonical[ib + 2] - canonical[ia + 2]);
+    const d2x = f32(canonical[ic] - canonical[ia]);
+    const d2y = f32(canonical[ic + 1] - canonical[ia + 1]);
+    const d2z = f32(canonical[ic + 2] - canonical[ia + 2]);
+    const nx = f32(f32(d1y * d2z) - f32(d1z * d2y));
+    const ny = f32(f32(d1z * d2x) - f32(d1x * d2z));
+    const nz = f32(f32(d1x * d2y) - f32(d1y * d2x));
+    const offset = polygon * 4;
+    planes[offset] = nx;
+    planes[offset + 1] = ny;
+    planes[offset + 2] = nz;
+    planes[offset + 3] = f32(-f32(
+      f32(f32(canonical[ia] * nx) + f32(canonical[ia + 1] * ny)) +
+      f32(canonical[ia + 2] * nz),
+    ));
+  }
+  return true;
 }
 
 function refreshShadowTopologyPositions(topology, positions) {
@@ -3161,7 +3216,7 @@ function refreshShadowTopologyPositions(topology, positions) {
     volume[volumeTarget + 1] = volume[volumeTarget + 4] = y;
     volume[volumeTarget + 2] = volume[volumeTarget + 5] = z;
   }
-  return true;
+  return refreshAnimatedShadowPlanes(topology);
 }
 
 const SHADOW_GROUP_STRUCTURE_FIELDS = Object.freeze([
@@ -3186,6 +3241,7 @@ function refreshedShadowTopologies(entry, normalized, dirty) {
       entry.indices !== normalized.indices ||
       entry.shadowVertexMap !== normalized.shadowVertexMap ||
       entry.shadowTriangleMask !== normalized.shadowTriangleMask ||
+      entry.shadowFaceMap !== normalized.shadowFaceMap ||
       !shadowGroupStructureMatches(entry.groups, normalized.groups)) return new Map();
   const positionsChanged = dirty.has('positions') || entry.positions !== normalized.positions;
   if (!positionsChanged) return previous;

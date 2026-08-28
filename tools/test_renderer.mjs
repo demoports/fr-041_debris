@@ -2600,12 +2600,18 @@ const movingShadowGeometry = {
   groups: [{ start: 0, count: 6 }],
   shadowVertexMap: rendererTypedArray('Uint32Array', [0, 1, 2, 0, 2, 3]),
   shadowTriangleMask: rendererTypedArray('Uint8Array', [1, 1]),
+  shadowFaceMap: rendererTypedArray('Uint32Array', [0, 0]),
+  // BoneData planes come from current vertices, not this authored static
+  // GenMinFace normal. Make it deliberately opposite to expose accidental use.
+  shadowFaceNormals: rendererTypedArray('Float32Array', [0, 0, -1]),
   dynamicAttributes: ['positions', 'normals', 'tangents'],
 };
 const movingShadowCache = new D.GeometryCache(fakeGL, { instance: true });
 const movingEntry = movingShadowCache.get(movingShadowGeometry);
 const movingTopology = D.prepareShadowTopology(movingEntry, movingEntry.groups);
 assert.deepEqual(Array.from(movingTopology.sourceIndices), [0, 1, 2, 5]);
+assert.deepEqual(Array.from(movingTopology.polygonPlanes), [0, 0, 1, -0],
+  'the first BoneData plane ignores the opposite authored static face normal');
 movingEntry.shadowTopologies.set('0:6', movingTopology);
 const movingTopologyMap = movingEntry.shadowTopologies;
 movingShadowGeometry.positions.set([1, 1, 0.75], 2 * 3);
@@ -2624,15 +2630,21 @@ assert.deepEqual(Array.from(movingTopology.volumePositions), [
   1, 1, 0.75, 1, 1, 0.75,
   0, 1, 0.25, 0, 1, 0.25,
 ]);
-const movingLight = [0.5, 0.5, -1];
+// EngMesh::Job::UpdatePlanes ignores the static stored/accurate polygon plane
+// for BoneData and rebuilds it from the first current fan triangle. The first
+// triangle above is (0,0,0), (1,0,0), (1,1,.75), whose plane is
+// (0,-.75,1,0). Keeping the original z=0 plane made the bending tubes around
+// 2:00 pop between incorrect shadow sides.
+assert.deepEqual(Array.from(movingTopology.polygonPlanes), [0, -0.75, 1, -0]);
+const firstFrameMovingTopology = D.prepareShadowTopology(movingEntry, movingEntry.groups);
+assert.deepEqual(Array.from(firstFrameMovingTopology.polygonPlanes), [0, -0.75, 1, -0],
+  'the first animated shadow draw also uses current BoneData planes');
+const movingLight = [0, 2, 1];
 const reusedMovingVolume = D.buildShadowVolume(
   movingEntry, movingTopology, movingLight, identity, true);
-const freshMovingVolume = D.buildShadowVolume(
-  movingEntry, movingEntry.groups, movingLight, identity, true);
-assert.deepEqual(Array.from(reusedMovingVolume.faceFront), Array.from(freshMovingVolume.faceFront));
-assert.deepEqual(Array.from(reusedMovingVolume.indices), Array.from(freshMovingVolume.indices));
-assert.equal(reusedMovingVolume.silhouetteIndexCount, freshMovingVolume.silhouetteIndexCount);
-assert.equal(reusedMovingVolume.capIndexCount, freshMovingVolume.capIndexCount);
+assert.deepEqual(Array.from(reusedMovingVolume.faceFront), [0]);
+assert.equal(reusedMovingVolume.silhouetteIndexCount, 24);
+assert.equal(reusedMovingVolume.capIndexCount, 6);
 
 // Structural references and group ranges are deliberately conservative cache
 // seams. A producer replacing any of them gets a fresh topology map even when
@@ -2653,6 +2665,9 @@ assertShadowTopologyInvalidated(() => {
 });
 assertShadowTopologyInvalidated(() => {
   movingShadowGeometry.shadowTriangleMask = movingShadowGeometry.shadowTriangleMask.slice();
+});
+assertShadowTopologyInvalidated(() => {
+  movingShadowGeometry.shadowFaceMap = movingShadowGeometry.shadowFaceMap.slice();
 });
 assertShadowTopologyInvalidated(() => {
   movingShadowGeometry.groups = [{ start: 0, count: 3 }, { start: 3, count: 3 }];
