@@ -1576,7 +1576,12 @@ function materialView(material, pass = null) {
       alphaCutoff: usage === 'base' && material.textures?.[3] ? ALPHA_REFERENCE : 0,
       detailOps: [((staticParameters[9] >>> 16) & 15), ((staticParameters[10] >>> 16) & 15)],
       usePrelight: usage === 'light',
-      lightScale: dynamicFlags & 0x40 ? 2 : 1,
+      // Only sMaterial20Light::Set and sMaterial20Fat::Set read the "2x
+      // intensity" bit (material20.cpp:502 and :618), and both are light
+      // passes. ZFill, Tex, VColor and Envi never scale their constants -
+      // sMaterial20VColor::Set does not read Para.Flags at all, so the
+      // ambient constant stays Engine->AmbientLight.
+      lightScale: (dynamicFlags & 0x40) && usage === 'light' ? 2 : 1,
       flags: staticFlags,
       runtimeFlags: dynamicFlags,
       environmentFlags: staticParameters[18] >>> 0,
