@@ -2955,59 +2955,6 @@ function weldKey(positions, index) {
   return `${x},${y},${z}`;
 }
 
-// One plane per casting source polygon. GenMinMesh planes take the stored
-// face normal verbatim (engine.cpp:3259-3262); GenMesh derives one with
-// CalcFacePlane -> CalcFaceNormalAccurate, which walks the ring's corners
-// with CalcNormal(prev,cur,next) = cross(cur-prev, next-prev), stops at the
-// first degenerate corner, keeps the last normal it computed, and falls back
-// to (1,0,0). Only the sign of n.L + w matters here, so the reference's
-// normalisation is not reproduced.
-function buildShadowPlanes(topology) {
-  const { positions, ringOffsets, ringVertices, planeIndices, sourceNormals,
-    sourceFaces, planes } = topology.planeData;
-  planes.fill(0);
-  for (let polygon = 0; polygon + 1 < ringOffsets.length; polygon++) {
-    const start = ringOffsets[polygon], stop = ringOffsets[polygon + 1];
-    const count = stop - start;
-    if (count < 3) continue;
-    let nx = 0, ny = 0, nz = 0;
-    const source = sourceFaces[polygon];
-    if (sourceNormals && source * 3 + 2 < sourceNormals.length) {
-      nx = sourceNormals[source * 3];
-      ny = sourceNormals[source * 3 + 1];
-      nz = sourceNormals[source * 3 + 2];
-    }
-    if (!sourceNormals || (nx === 0 && ny === 0 && nz === 0)) {
-      let length = 0;
-      for (let corner = 0; corner < count; corner++) {
-        const previous = ringVertices[start + (corner + count - 1) % count] * 3;
-        const current = ringVertices[start + corner] * 3;
-        const next = ringVertices[start + (corner + 1) % count] * 3;
-        const t1x = positions[current] - positions[previous];
-        const t1y = positions[current + 1] - positions[previous + 1];
-        const t1z = positions[current + 2] - positions[previous + 2];
-        const t2x = positions[next] - positions[previous];
-        const t2y = positions[next + 1] - positions[previous + 1];
-        const t2z = positions[next + 2] - positions[previous + 2];
-        nx = t1y * t2z - t1z * t2y;
-        ny = t1z * t2x - t1x * t2z;
-        nz = t1x * t2y - t1y * t2x;
-        length = nx * nx + ny * ny + nz * nz;
-        if (!(length > 1e-40)) break;
-      }
-      if (!(length > 1e-40)) { nx = 1; ny = 0; nz = 0; }
-    }
-    const origin = ringVertices[start] * 3;
-    const offset = planeIndices[polygon] * 4;
-    planes[offset] = nx;
-    planes[offset + 1] = ny;
-    planes[offset + 2] = nz;
-    planes[offset + 3] = -(nx * positions[origin] + ny * positions[origin + 1] +
-      nz * positions[origin + 2]);
-  }
-  return planes;
-}
-
 // The native shadow job is prepared once for the whole mesh, not once per
 // material. `groups` therefore contains every range whose material has an
 // MPP_SHADOW pass. Position welding recreates GenMesh's shared topology when
@@ -3049,7 +2996,6 @@ function prepareShadowTopology(geometry, groups = geometry.groups) {
   const faceMap = geometry.shadowFaceMap;
   let ring = null;
   let ringSource = -1;
-  let ringCasts = false;
   const flushRing = () => {
     if (!ring) return;
     // Collapse vertices the position weld made identical; a polygon whose
@@ -3059,20 +3005,21 @@ function prepareShadowTopology(geometry, groups = geometry.groups) {
       if (collapsed[collapsed.length - 1] !== value) collapsed.push(value);
     }
     while (collapsed.length > 1 && collapsed[0] === collapsed[collapsed.length - 1]) collapsed.pop();
-    polygonRings.push(collapsed.length >= 3 ? collapsed : null);
-    polygonSources.push(ringSource);
-    polygonCasts.push(ringCasts);
+    if (collapsed.length >= 3) {
+      polygonRings.push(collapsed);
+      polygonSources.push(ringSource);
+    } else {
+      // Keep the polygon slot so trianglePolygon indices stay valid.
+      polygonRings.push(null);
+      polygonSources.push(ringSource);
+    }
     ring = null;
   };
-  // Non-casting polygons are kept in the topology too: the reference reads
-  // the neighbour's plane across an edge whether or not that neighbour casts
-  // (engine.cpp:2662-2663), so its silhouette depends on them.
-  const polygonCasts = [];
   for (const group of groups || []) {
     const end = Math.min(indices.length, group.start + group.count);
     for (let cursor = group.start; cursor + 2 < end; cursor += 3) {
       const triangle = cursor / 3;
-      const casts = geometry.shadowTriangleMask ? Boolean(geometry.shadowTriangleMask[triangle]) : true;
+      if (geometry.shadowTriangleMask && !geometry.shadowTriangleMask[triangle]) continue;
       const a = canonicalIndex(indices[cursor]);
       const b = canonicalIndex(indices[cursor + 1]);
       const c = canonicalIndex(indices[cursor + 2]);
@@ -3080,18 +3027,16 @@ function prepareShadowTopology(geometry, groups = geometry.groups) {
       if (ring === null || source !== ringSource) {
         flushRing();
         ringSource = source;
-        ringCasts = casts;
         // The producers fan a ring [v0..vn-1] as (v0,v1,v2), (v0,v2,v3), ...
         // so the ring is the first triangle plus each later third vertex.
         ring = [a, b, c];
       } else {
         ring.push(c);
       }
-      if (casts && a !== b && b !== c && c !== a) {
+      if (a !== b && b !== c && c !== a) {
         faces.push(a, b, c);
         trianglePolygon.push(polygonRings.length);
       }
-
     }
   }
   flushRing();
@@ -3105,23 +3050,7 @@ function prepareShadowTopology(geometry, groups = geometry.groups) {
     if (!records) edges.set(key, records = []);
     records.push({ a, b, face });
   };
-  // EngMesh numbers planes as Face[i].Temp + 1, and Temp is assigned to every
-  // face before the caster test (engine.cpp:2529) while faceCount advances
-  // only for casters. A caster therefore owns plane (casters before it) + 1,
-  // and a non-caster aliases the plane of the NEXT caster in source order -
-  // the value edge->Face[1] borrows at engine.cpp:2663. Walk source order to
-  // reproduce that numbering.
-  const polygonOrder = polygonRings.map((_, index) => index)
-    .sort((left, right) => polygonSources[left] - polygonSources[right]);
-  const polygonPlaneIndex = new Uint32Array(polygonRings.length);
-  let casterCount = 0;
-  for (const polygon of polygonOrder) {
-    polygonPlaneIndex[polygon] = casterCount + 1;
-    if (polygonCasts[polygon] && polygonRings[polygon]) casterCount++;
-  }
-  // One edge per polygon perimeter segment. The reference only walks casting
-  // faces, so an edge exists when at least one of its polygons casts, but
-  // both sides are recorded because the non-casting side supplies a plane.
+  // One edge per polygon perimeter segment. `face` now names a polygon.
   for (let polygon = 0; polygon < polygonRings.length; polygon++) {
     const loop = polygonRings[polygon];
     if (!loop) continue;
@@ -3129,22 +3058,51 @@ function prepareShadowTopology(geometry, groups = geometry.groups) {
       addEdge(loop[index], loop[(index + 1) % loop.length], polygon);
     }
   }
-  // Flatten the rings so planes can be recomputed whenever the topology's
-  // positions are refreshed for an animated mesh.
-  const ringOffsets = new Uint32Array(polygonRings.length + 1);
-  const ringVertices = [];
+  // One plane per polygon. GenMinMesh planes take the stored face normal
+  // (engine.cpp:3259-3262); GenMesh recomputes it with CalcFaceNormalAccurate
+  // (genmesh.cpp), which walks the ring's corners and keeps the last one,
+  // stopping early on a degenerate corner and falling back to (1,0,0).
+  const sourceNormals = geometry.shadowFaceNormals || null;
+  const polygonPlanes = new Float32Array(polygonRings.length * 4);
   for (let polygon = 0; polygon < polygonRings.length; polygon++) {
-    ringOffsets[polygon] = ringVertices.length;
     const loop = polygonRings[polygon];
-    if (loop && polygonCasts[polygon]) ringVertices.push(...loop);
+    if (!loop) continue;
+    let nx = 0, ny = 0, nz = 0;
+    const source = polygonSources[polygon];
+    if (sourceNormals && source * 3 + 2 < sourceNormals.length) {
+      nx = sourceNormals[source * 3];
+      ny = sourceNormals[source * 3 + 1];
+      nz = sourceNormals[source * 3 + 2];
+    }
+    if (!sourceNormals || (nx === 0 && ny === 0 && nz === 0)) {
+      const count = loop.length;
+      let length = 0;
+      for (let corner = 0; corner < count; corner++) {
+        const previous = loop[(corner + count - 1) % count] * 3;
+        const current = loop[corner] * 3;
+        const next = loop[(corner + 1) % count] * 3;
+        const t1x = canonical[current] - canonical[previous];
+        const t1y = canonical[current + 1] - canonical[previous + 1];
+        const t1z = canonical[current + 2] - canonical[previous + 2];
+        const t2x = canonical[next] - canonical[previous];
+        const t2y = canonical[next + 1] - canonical[previous + 1];
+        const t2z = canonical[next + 2] - canonical[previous + 2];
+        nx = t1y * t2z - t1z * t2y;
+        ny = t1z * t2x - t1x * t2z;
+        nz = t1x * t2y - t1y * t2x;
+        length = nx * nx + ny * ny + nz * nz;
+        if (!(length > 1e-40)) break;
+      }
+      if (!(length > 1e-40)) { nx = 1; ny = 0; nz = 0; }
+    }
+    const origin = loop[0] * 3;
+    const offset = polygon * 4;
+    polygonPlanes[offset] = nx;
+    polygonPlanes[offset + 1] = ny;
+    polygonPlanes[offset + 2] = nz;
+    polygonPlanes[offset + 3] = -(nx * canonical[origin] + ny * canonical[origin + 1] +
+      nz * canonical[origin + 2]);
   }
-  ringOffsets[polygonRings.length] = ringVertices.length;
-  // Planes[0] is Init(0,0,0,0) (engine.cpp:2580) and classifies as front. A
-  // non-caster after the last caster aliases slot casterCount+1, which the
-  // reference reads past its own plane array; keep that slot present and
-  // zeroed so it classifies front rather than reading out of bounds.
-  const planeCount = casterCount + 1;
-  const polygonPlanes = new Float32Array((planeCount + 1) * 4);
   const edgeRecords = Array.from(edges.values());
   let boundaryEdges = 0, nonManifoldEdges = 0, windingConflictEdges = 0;
   let maxEdgeIncidence = 0;
@@ -3169,21 +3127,14 @@ function prepareShadowTopology(geometry, groups = geometry.groups) {
     volumePositions[target + 2] = volumePositions[target + 5] = z;
     extrusions[index * 2 + 1] = 1;
   }
-  const topologyPositions = new Float32Array(canonical);
-  const result = {
-    positions: topologyPositions,
+  return {
+    positions: new Float32Array(canonical),
     sourceIndices: new Uint32Array(canonicalSources),
     usesShadowVertexMap,
     faces: new Uint32Array(faces),
-    // trianglePolygon indexes polygons; trianglePlane resolves straight to
-    // the shared plane slot each fan triangle's cap must use.
     trianglePolygon: new Uint32Array(trianglePolygon),
-    trianglePlane: new Uint32Array(trianglePolygon.map(polygon => polygonPlaneIndex[polygon])),
-    edgePlanes: new Uint32Array(polygonPlaneIndex),
-    polygonCasts: Uint8Array.from(polygonCasts, value => value ? 1 : 0),
     polygonPlanes,
     polygonCount: polygonRings.length,
-    planeCount,
     edges: edgeRecords,
     boundaryEdges,
     nonManifoldEdges,
@@ -3192,17 +3143,6 @@ function prepareShadowTopology(geometry, groups = geometry.groups) {
     volumePositions,
     extrusions,
   };
-  result.planeData = {
-    positions: topologyPositions,
-    ringOffsets,
-    ringVertices: new Uint32Array(ringVertices),
-    planeIndices: polygonPlaneIndex,
-    sourceNormals: geometry.shadowFaceNormals || null,
-    sourceFaces: new Uint32Array(polygonSources),
-    planes: polygonPlanes,
-  };
-  buildShadowPlanes(result);
-  return result;
 }
 
 function refreshShadowTopologyPositions(topology, positions) {
@@ -3221,7 +3161,6 @@ function refreshShadowTopologyPositions(topology, positions) {
     volume[volumeTarget + 1] = volume[volumeTarget + 4] = y;
     volume[volumeTarget + 2] = volume[volumeTarget + 5] = z;
   }
-  if (topology.planeData) buildShadowPlanes(topology);
   return true;
 }
 
@@ -3288,21 +3227,14 @@ function buildShadowVolume(geometry, groups, light, model = mat4Identity(), incl
   // Engine_::UpdateShadowCacheJob classifies one plane per source polygon
   // (engine.cpp:3584-3589), not one per fan triangle, so every triangle of a
   // polygon shares its front/back bit and its cap lands on one side.
+  const polygonCount = topology.polygonCount ?? (topology.faces.length / 3);
   const planes = topology.polygonPlanes;
-  const planeSlots = planes.length / 4;
-  const planeFront = shadowScratchArray(scratch, 'planeFront', Uint8Array, planeSlots);
-  for (let plane = 0; plane < planeSlots; plane++) {
-    const offset = plane * 4;
-    planeFront[plane] = planes[offset] * lightPosition[0] +
+  const faceFront = shadowScratchArray(scratch, 'faceFront', Uint8Array, polygonCount);
+  for (let polygon = 0; polygon < polygonCount; polygon++) {
+    const offset = polygon * 4;
+    faceFront[polygon] = planes[offset] * lightPosition[0] +
       planes[offset + 1] * lightPosition[1] +
       planes[offset + 2] * lightPosition[2] + planes[offset + 3] >= 0 ? 1 : 0;
-  }
-  // faceFront stays the per-triangle view: every fan triangle reports the
-  // bit of the one plane its polygon owns.
-  const triangleCount = topology.faces.length / 3;
-  const faceFront = shadowScratchArray(scratch, 'faceFront', Uint8Array, triangleCount);
-  for (let face = 0; face < triangleCount; face++) {
-    faceFront[face] = planeFront[topology.trianglePlane[face]];
   }
 
   const IndexType = vertexCount * 2 > 0xffff ? Uint32Array : Uint16Array;
@@ -3310,23 +3242,11 @@ function buildShadowVolume(geometry, groups, light, model = mat4Identity(), incl
     (includeCaps ? topology.faces.length : 0);
   const indexValues = shadowScratchArray(scratch, 'indices', IndexType, maximumIndexCount);
   let indexCount = 0;
-  const casts = topology.polygonCasts;
-  const edgePlanes = topology.edgePlanes;
   for (const records of topology.edges) {
-    // The reference emits an edge only while walking a casting face, but its
-    // Face[1] is GetFace(e^1)->Temp + 1 regardless of whether that neighbour
-    // casts (engine.cpp:2662-2663), so a non-casting neighbour contributes a
-    // real front/back bit rather than a forced "front".
-    let first = records[0];
-    let second = records[1] || null;
-    if (casts && first && !casts[first.face] && second && casts[second.face]) {
-      const swap = first; first = second; second = swap;
-    }
-    if (casts && first && !casts[first.face]) continue;
-    const firstFront = Boolean(planeFront[edgePlanes ? edgePlanes[first.face] : first.face]);
-    const secondFront = second
-      ? Boolean(planeFront[edgePlanes ? edgePlanes[second.face] : second.face])
-      : true;
+    const first = records[0];
+    const firstFront = Boolean(faceFront[first.face]);
+    const second = records[1] || null;
+    const secondFront = second ? Boolean(faceFront[second.face]) : true;
     if (firstFront === secondFront) continue;
     let a, b;
     if (firstFront) { a = first.a; b = first.b; }
@@ -3339,8 +3259,9 @@ function buildShadowVolume(geometry, groups, light, model = mat4Identity(), incl
   }
   const silhouetteIndexCount = indexCount;
   if (includeCaps) {
+    const triangleCount = topology.faces.length / 3;
     for (let face = 0; face < triangleCount; face++) {
-      const offset = face * 3, side = faceFront[face];
+      const offset = face * 3, side = faceFront[topology.trianglePolygon[face]];
       indexValues[indexCount++] = topology.faces[offset] * 2 + side;
       indexValues[indexCount++] = topology.faces[offset + 1] * 2 + side;
       indexValues[indexCount++] = topology.faces[offset + 2] * 2 + side;
@@ -3353,7 +3274,6 @@ function buildShadowVolume(geometry, groups, light, model = mat4Identity(), incl
     silhouetteIndexCount,
     capIndexCount: indexCount - silhouetteIndexCount,
     faceFront,
-    planeFront,
     lightPosition,
     topology,
   };
