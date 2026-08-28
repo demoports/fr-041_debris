@@ -2361,6 +2361,44 @@ import {
     return result._touch();
   }
 
+  function stableSubdivisionFanOrigin(mesh, ids) {
+    if (ids.length <= 3) return ids;
+    const positions = ids.map(id => {
+      const vertex = mesh.vertices[id];
+      return mesh.vertices[vertex.first]?.position || vertex.position;
+    });
+    const normal = [0, 0, 0];
+    for (let index = 0; index < positions.length; index++) {
+      const current = positions[index], next = positions[(index + 1) % positions.length];
+      normal[0] += (current[1] - next[1]) * (current[2] + next[2]);
+      normal[1] += (current[2] - next[2]) * (current[0] + next[0]);
+      normal[2] += (current[0] - next[0]) * (current[1] + next[1]);
+    }
+    if (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2] <= 1e-20) {
+      return ids;
+    }
+    const valid = offset => {
+      const first = positions[offset];
+      for (let index = 2; index < positions.length; index++) {
+        const second = positions[(offset + index - 1) % positions.length];
+        const third = positions[(offset + index) % positions.length];
+        const ax = second[0] - first[0], ay = second[1] - first[1], az = second[2] - first[2];
+        const bx = third[0] - first[0], by = third[1] - first[1], bz = third[2] - first[2];
+        const cx = ay * bz - az * by;
+        const cy = az * bx - ax * bz;
+        const cz = ax * by - ay * bx;
+        if (cx * cx + cy * cy + cz * cz <= 1e-20 ||
+            cx * normal[0] + cy * normal[1] + cz * normal[2] <= 0) return false;
+      }
+      return true;
+    };
+    if (valid(0)) return ids;
+    for (let offset = 1; offset < ids.length; offset++) {
+      if (valid(offset)) return ids.slice(offset).concat(ids.slice(0, offset));
+    }
+    return ids;
+  }
+
   function Mesh_ShadowEnable(mesh, enabled, owned = false) {
     const result = checkedCopy(mesh, 0, owned);
     if (!result) return null;
@@ -2780,13 +2818,20 @@ import {
         }
       } else {
         const ids = [];
+        let hasSplitPoint = false;
         for (const halfedge of loop) {
           ids.push(source.getVertId(halfedge));
           const point = edgePoints.get(halfedge >> 1)?.[halfedge & 1];
-          if (point !== undefined) ids.push(point);
+          if (point !== undefined) { ids.push(point); hasSplitPoint = true; }
         }
+        // Native SplitBridge/SplitFace retains a topology-dependent Face.Edge
+        // origin. Rebuilding the polygon otherwise resets that cyclic origin,
+        // and Mesh_ToMin's fan can begin with collinear or reversed boundary
+        // points. Recover the first origin whose complete fan keeps the
+        // polygon winding; this changes only the loop start, not its topology.
+        const stableIds = hasSplitPoint ? stableSubdivisionFanOrigin(output, ids) : ids;
         polygons.push({
-          verts: ids, mask: face.mask, id: face.id, select: false,
+          verts: stableIds, mask: face.mask, id: face.id, select: false,
           used: face.used, material: face.material,
         });
       }

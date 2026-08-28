@@ -599,6 +599,40 @@ assert.deepEqual(Array.from(subdivided.vertices[0].uv), Array.from(cube.vertices
 assert.ok(subdivided.edges.some(edge => edge.vert.includes(cube.vertices.length + cube.faces.length) &&
   edge.crease === sourceEdge.crease), 'both split edge halves retain native crease metadata');
 
+// Debris ops 15654..15660 selectively subdivide the destructible road twice.
+// Split points turn neighboring quads into pentagons; their cyclic Face.Edge
+// origin must still make a consistently wound fan because Mesh_ToMin and the
+// following Explode operator preserve and triangulate that exact order.
+let debrisRoad = D.Mesh_Grid(2, 8, 32);
+debrisRoad = D.Mesh_Transform(debrisRoad, 0,
+  [24, 24, 24, 0.5, 0, 0, 0, 0, 0]);
+debrisRoad = D.Mesh_SelectCube(debrisRoad, 65792, 2,
+  [0, 0, 0], [24, 12, 11]);
+debrisRoad = D.Mesh_Subdivide(debrisRoad, 1, 1, 1);
+debrisRoad = D.Mesh_SelectCube(debrisRoad, 65792, 2,
+  [-2, 0, 0], [6, 1.25, 6]);
+debrisRoad = D.Mesh_Subdivide(debrisRoad, 1, 1, 1);
+const debrisRoadFanAreas = { positive: 0, negative: 0, zero: 0 };
+for (const face of debrisRoad.faces) {
+  if (!face.material || face.edge < 0) continue;
+  const ids = debrisRoad.faceVertices(face);
+  const position = id => {
+    const vertex = debrisRoad.vertices[id];
+    return debrisRoad.vertices[vertex.first]?.position || vertex.position;
+  };
+  const first = position(ids[0]);
+  for (let index = 2; index < ids.length; index++) {
+    const second = position(ids[index - 1]), third = position(ids[index]);
+    const areaY = (second[2] - first[2]) * (third[0] - first[0]) -
+      (second[0] - first[0]) * (third[2] - first[2]);
+    if (areaY > 1e-8) debrisRoadFanAreas.positive++;
+    else if (areaY < -1e-8) debrisRoadFanAreas.negative++;
+    else debrisRoadFanAreas.zero++;
+  }
+}
+assert.deepEqual(debrisRoadFanAreas, { positive: 1526, negative: 0, zero: 0 },
+  'selective subdivision retains a valid native fan origin for every road face');
+
 const shadowless = invoke(0xb0, [0], [cube]);
 assert.ok(shadowless.faces.every(face => !face.used));
 assert.ok(cube.faces.every(face => face.used));
