@@ -6,7 +6,7 @@ import {
   mat4Copy,
   mat4Identity,
   mat4TransformPoint,
-  vec3Normalize,
+  vec3NormalizeSafe,
 } from './core.js';
 import { InstanceChain } from './runtime.js';
 import { ensureFrame } from './scene.js';
@@ -226,7 +226,9 @@ function execChainLine(call) {
     wind[0] = f32(wind[0] * p[15] + p[17]);
     wind[1] = f32(wind[1] * p[15] * 0.5 + p[18]);
     wind[2] = f32(wind[2] * p[15] + p[19]);
-    const windDirection = vec3Normalize(wind, scratch.windDirection);
+    // Exec_Effect_ChainLine calls UnitSafe3 here, whose 1e-20 epsilon applies
+    // to squared length and falls back to +X for a near-zero wind vector.
+    const windDirection = vec3NormalizeSafe(wind, scratch.windDirection);
 
     for (const line of mem.lines) {
       const damping = mem.firstCycles === 0 ? p[11] : 0.975;

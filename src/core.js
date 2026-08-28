@@ -213,8 +213,11 @@
   }
 
   function mat4Direction(direction, out = new Float32Array(16)) {
-    const k = vec3Normalize(direction);
-    const i = vec3Normalize(vec3Cross([0, 1, 0], k));
+    // sMatrix::InitDir uses UnitSafe3 for both basis vectors. Its epsilon is
+    // applied to squared length, unlike the ordinary normalizer retained for
+    // source call sites which use Unit3.
+    const k = vec3NormalizeSafe(direction);
+    const i = vec3NormalizeSafe(vec3Cross([0, 1, 0], k));
     const j = vec3Cross(k, i);
     out[0] = i[0]; out[1] = i[1]; out[2] = i[2]; out[3] = 0;
     out[4] = j[0]; out[5] = j[1]; out[6] = j[2]; out[7] = 0;
@@ -333,6 +336,21 @@
     return out;
   }
 
+  function vec3NormalizeSafe(vector, out = new Float32Array(3)) {
+    const lengthSquared =
+      vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2];
+    if (lengthSquared > 1e-20) {
+      const inverseLength = 1 / Math.sqrt(lengthSquared);
+      out[0] = f32(vector[0] * inverseLength);
+      out[1] = f32(vector[1] * inverseLength);
+      out[2] = f32(vector[2] * inverseLength);
+    } else {
+      out[0] = 1;
+      out[1] = out[2] = 0;
+    }
+    return out;
+  }
+
 export {
   Random,
   MatrixStack,
@@ -354,4 +372,5 @@ export {
   sseSinCos,
   vec3Cross,
   vec3Normalize,
+  vec3NormalizeSafe,
 };

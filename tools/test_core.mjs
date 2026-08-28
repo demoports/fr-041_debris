@@ -3,12 +3,15 @@ import {
   MatrixStack,
   Random,
   f32ToBits,
+  mat4Direction,
   mat4EulerTurns,
   mat4Identity,
   mat4MulA,
   mat4SRT,
   mat4TransformPoint,
   sseSinCos,
+  vec3Normalize,
+  vec3NormalizeSafe,
 } from '../src/core.js';
 
 const random = new Random();
@@ -41,6 +44,19 @@ assert.deepEqual(Array.from(sseSinCos(-Math.PI / 2), f32ToBits),
 assert.equal(rotated[2], 0.9999977350234985);
 
 assert.deepEqual(Array.from(mat4MulA(srt, identity)), Array.from(srt));
+
+// UnitSafe3 compares squared length against 1e-20 and falls back to +X.
+// Keep it separate from Unit3-style call sites, which still normalize this
+// small but nonzero vector.
+assert.deepEqual(Array.from(vec3Normalize([0, 1e-12, 0])), [0, 1, 0]);
+assert.deepEqual(Array.from(vec3NormalizeSafe([0, 1e-12, 0])), [1, 0, 0]);
+assert.deepEqual(Array.from(vec3NormalizeSafe([0, 1e-8, 0])), [0, 1, 0]);
+assert.deepEqual(Array.from(mat4Direction([0, 1e-12, 0])), [
+  0, 0, -1, 0,
+  -0, 1, 0, 0,
+  1, 0, 0, 0,
+  0, 0, 0, 1,
+]);
 const stack = new MatrixStack();
 stack.pushMul(srt);
 assert.deepEqual(Array.from(stack.top), Array.from(srt));
