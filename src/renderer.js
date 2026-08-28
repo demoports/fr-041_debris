@@ -1933,7 +1933,13 @@ function glarePlan(parameters = []) {
   else if ((flags & 3) === 2) downsample = [true, true];
   else downsample = [true, false];
   const threshold = colorARGB(parameters[2] >>> 0);
-  const grayScale = 1 / ((1 - threshold[0]) + (1 - threshold[1]) + (1 - threshold[2]));
+  // KOp::Calc leaves the released x87 in PC24 mode. Preserve each rounded
+  // operation in geneffectipp.cpp's grayscale divisor, not just its upload.
+  const inverseRed = f32(1 - threshold[0]);
+  const inverseGreen = f32(1 - threshold[1]);
+  const inverseBlue = f32(1 - threshold[2]);
+  const grayDenominator = f32(f32(inverseRed + inverseGreen) + inverseBlue);
+  const grayScale = f32(1 / grayDenominator);
   return {
     flags,
     downsample,

@@ -1250,6 +1250,15 @@ const glareParameters = [
 let plan = D.glarePlan(glareParameters);
 assert.deepEqual(Array.from(plan.downsample), [true, false]);
 assert.equal(plan.copyDownsample, false);
+for (const [threshold, expectedBits] of [
+  [0xff404040, 0x3ee3da78],
+  [0xff909090, 0x3f44093b],
+]) {
+  const roundedParameters = glareParameters.slice();
+  roundedParameters[2] = threshold;
+  assert.equal(D.f32ToBits(D.glarePlan(roundedParameters).grayScale), expectedBits,
+    `glare threshold 0x${threshold.toString(16)} retains PC24 divisor rounding`);
+}
 assert.deepEqual(JSON.parse(JSON.stringify(plan.stages)),
   [{ blur: 0.008, amplify: 1.25 }, { blur: 0.004, amplify: 1 }]);
 assert.deepEqual(Array.from(plan.glareColor, value => Number(value.toFixed(6))),
