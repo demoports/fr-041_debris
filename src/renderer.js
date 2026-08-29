@@ -4855,12 +4855,24 @@ class Renderer {
       if (!view) this.defaultMaterialViews.set(key, view = compiledMaterialView(material, pass));
       return view;
     }
-    let views = this.materialViews.get(material);
-    if (!views) this.materialViews.set(material, views = new Map());
+    // Material_Add retains each copied pass' original material as its static
+    // owner while the downstream material supplies animated parameters. Two
+    // owners may legitimately share usage/state, so both identities belong in
+    // the cache key. Keying by the transient pass record would miss whenever
+    // traversal reconstructs that record; the retained material is stable.
+    const passMaterial = pass?.material;
+    const owner = passMaterial &&
+      (typeof passMaterial === 'object' || typeof passMaterial === 'function')
+      ? passMaterial : material;
+    let owners = this.materialViews.get(material);
+    if (!owners) this.materialViews.set(material, owners = new WeakMap());
+    let views = owners.get(owner);
+    if (!views) owners.set(owner, views = new Map());
     const version = Number.isSafeInteger(material.version) ? material.version : 0;
+    const ownerVersion = Number.isSafeInteger(owner.version) ? owner.version : 0;
     let cached = views.get(key);
-    if (!cached || cached.version !== version) {
-      cached = { version, view: compiledMaterialView(material, pass) };
+    if (!cached || cached.version !== version || cached.ownerVersion !== ownerVersion) {
+      cached = { version, ownerVersion, view: compiledMaterialView(material, pass) };
       views.set(key, cached);
     }
     return cached.view;

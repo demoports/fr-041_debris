@@ -186,6 +186,68 @@ assert.equal(varyingScalars, 44,
   assert.notEqual(D.materialState(animated), firstState,
     'a material generation change compiles a fresh render state');
   assert.equal(D.materialState(animated).depthTest, true);
+
+  // Material_Add copies pass records but retains their original static owner.
+  // Equal usage/state strings must not make an inherited pass reuse the
+  // downstream material's compiled flags (or vice versa).
+  const inheritedOwner = {
+    system: '1.1', parameters: new Array(64).fill(0), textures: [], version: 0,
+  };
+  const downstream = {
+    system: '1.1', parameters: new Array(64).fill(0), textures: [], version: 0,
+  };
+  inheritedOwner.parameters[0] = 0x0300;
+  downstream.parameters[0] = 0x2300;
+  downstream.parameters[28] = 0xff304050;
+  const inheritedPass = {
+    usage: 'other', state: 'material11-single', material: inheritedOwner,
+  };
+  const downstreamPass = {
+    usage: 'other', state: 'material11-single', material: downstream,
+  };
+  const inheritedView = D.Renderer.prototype.viewMaterial.call(
+    renderer, downstream, inheritedPass,
+  );
+  const downstreamView = D.Renderer.prototype.viewMaterial.call(
+    renderer, downstream, downstreamPass,
+  );
+  assert.notEqual(inheritedView, downstreamView);
+  assert.equal(inheritedView.baseFlags, 0x0300);
+  assert.equal(downstreamView.baseFlags, 0x2300);
+  assert.equal(inheritedView.color, 0xff304050);
+  assert.equal(downstreamView.color, 0xff304050);
+  assert.equal(D.Renderer.prototype.viewMaterial.call(
+    renderer, downstream, inheritedPass,
+  ), inheritedView);
+  assert.equal(D.Renderer.prototype.viewMaterial.call(
+    renderer, downstream, downstreamPass,
+  ), downstreamView);
+
+  downstream.parameters = downstream.parameters.slice();
+  downstream.parameters[28] = 0xffa0b0c0;
+  downstream.version++;
+  const animatedInheritedView = D.Renderer.prototype.viewMaterial.call(
+    renderer, downstream, inheritedPass,
+  );
+  const animatedDownstreamView = D.Renderer.prototype.viewMaterial.call(
+    renderer, downstream, downstreamPass,
+  );
+  assert.notEqual(animatedInheritedView, inheritedView);
+  assert.notEqual(animatedDownstreamView, downstreamView);
+  assert.equal(animatedInheritedView.color, 0xffa0b0c0);
+  assert.equal(animatedDownstreamView.color, 0xffa0b0c0);
+
+  inheritedOwner.parameters = inheritedOwner.parameters.slice();
+  inheritedOwner.parameters[0] = 0x0200;
+  inheritedOwner.version++;
+  const recompiledInheritedView = D.Renderer.prototype.viewMaterial.call(
+    renderer, downstream, inheritedPass,
+  );
+  assert.notEqual(recompiledInheritedView, animatedInheritedView);
+  assert.equal(recompiledInheritedView.baseFlags, 0x0200);
+  assert.equal(D.Renderer.prototype.viewMaterial.call(
+    renderer, downstream, downstreamPass,
+  ), animatedDownstreamView, 'an unrelated pass owner stays cached');
 }
 
 // D3DCULL_CCW keeps WZ3's authored clockwise faces. The port projection does
