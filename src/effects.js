@@ -6,6 +6,7 @@ import {
   mat4Copy,
   mat4Identity,
   mat4TransformPoint,
+  sFPow,
   vec3NormalizeSafe,
 } from './core.js';
 import { InstanceChain } from './runtime.js';
@@ -376,8 +377,8 @@ function buildWaterGeometry(spline, parameters, time, geometry = null) {
   const scale = parameters[0] || 0;
   const scalePosition = parameters[1] || 0;
   const scaleUV = parameters[2] || 0;
-  const speed = (parameters[3] || 0) * 32;
-  const scaleAmplitude = parameters[4] || 0;
+  const speed = f32((parameters[3] || 0) * 32);
+  const scaleAmplitude = f32(parameters[4] || 0);
   const blobSpline = spline?.blobSpline || spline;
   const keys = blobSpline?.keys || [];
   const scratch = geometry._waterScratch;
@@ -385,19 +386,19 @@ function buildWaterGeometry(spline, parameters, time, geometry = null) {
   let waveCount = 0;
   for (const key of keys) {
     if (key.time > time) continue;
-    const deltaTime = time - key.time;
-    const decay = 1 / Math.pow(key.rz, deltaTime);
+    const deltaTime = f32(f32(time) - key.time);
+    const decay = f32(1 / sFPow(key.rz, deltaTime));
     if (!(decay > 0.0001)) continue;
     const wave = waves[waveCount] ||= { x: 0, z: 0, values: new Float32Array(1024) };
     const values = wave.values;
     for (let index = 0; index < 1024; index++) {
-      const distance = index / 1024 * 16 * key.ry;
-      const phase = deltaTime * speed - distance * key.rx;
-      let damping = scaleAmplitude;
-      damping *= 1 / Math.pow(key.rz, phase);
-      damping *= 1 / Math.pow(20, distance);
-      damping *= key.zoom;
-      values[index] = phase < 0 ? 0 : f32(Math.sin(phase * 3.14) * damping);
+      const distance = f32((index / 1024 * 16) * key.ry);
+      const phase = f32(f32(deltaTime * speed) - f32(distance * key.rx));
+      let damping = f32(scaleAmplitude);
+      damping = f32(damping * f32(1 / sFPow(key.rz, phase)));
+      damping = f32(damping * f32(1 / sFPow(20, distance)));
+      damping = f32(damping * key.zoom);
+      values[index] = phase < 0 ? 0 : f32(Math.sin(f32(phase * 3.14)) * damping);
     }
     wave.x = key.px * scalePosition * (width - 1);
     wave.z = key.pz * scalePosition * (height - 1);

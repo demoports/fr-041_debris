@@ -71,7 +71,7 @@ assert.deepEqual(Array.from(normals.data.slice(0, 4)),
 // Merge mode 4 writes authored gloss into A without changing the X/Y/Z
 // procedural normal words. Format then changes only upload policy.
 const glossNormals = runtime.operations[245].precalc(runtime.environment);
-assert.equal(glossNormals.summary().hash, 3460027563);
+assert.equal(glossNormals.summary().hash, 2420125279);
 for (let index = 0; index < normals.data.length; index += 4) {
   assert.equal(glossNormals.data[index], normals.data[index]);
   assert.equal(glossNormals.data[index + 1], normals.data[index + 1]);
@@ -79,7 +79,7 @@ for (let index = 0; index < normals.data.length; index += 4) {
 }
 const signedNormals = runtime.operations[246].precalc(runtime.environment);
 assert.equal(signedNormals.format, 5);
-assert.equal(signedNormals.summary().hash, 3460027563);
+assert.equal(signedNormals.summary().hash, 2420125279);
 
 // UpdateTexture(Q8W8V8U8) normalizes each raw X/Y/Z vector and writes words
 // 2,1,0 as shader R,G,B. Existing GL unit fixtures pin the three basis axes;
@@ -94,7 +94,7 @@ assert.deepEqual(Array.from(upload.slice(0, 4)), [126, -3, -1, 7]);
 // Bitmap_Bump consumes the pre-upload words in their original X/Y/Z order;
 // it must not inherit the GPU-only 2,1,0 swizzle or any SNORM sign change.
 const lit = runtime.operations[247].precalc(runtime.environment);
-assert.equal(lit.summary().hash, 2928978459);
+assert.equal(lit.summary().hash, 4113177847);
 assert.deepEqual(Array.from(lit.data.slice(0, 4)), [269, 256, 310, 186]);
 
 console.log('production normal -> gloss -> Q8W8V8U8/Bump pipeline passed');

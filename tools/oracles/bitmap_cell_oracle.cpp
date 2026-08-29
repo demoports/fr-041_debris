@@ -5,7 +5,9 @@
 // sSetRndSeed/sGetRnd (vendor/wz3/_types.cpp:43-118) and the scalar form of
 // the MMX Fade64 (genbitmap.cpp:170) that bitmap_misc_oracle.cpp already uses.
 //
-// Bitmap_Cell itself is asm-free; only Fade64 and the RNG needed transcribing.
+// Bitmap_Cell also calls the handwritten x87 sFPow. The finite, nonnegative
+// production domain below needs its zero-base shortcut in addition to the
+// ordinary float pow result: released sFPow defines 0^0 as zero.
 //
 // Build: c++ -std=c++17 -O2 -o /tmp/cell tools/oracles/bitmap_cell_oracle.cpp
 // Run:   /tmp/cell            (prints one FNV-1a per shipped fixture)
@@ -39,6 +41,11 @@ static void setRndSeed(int32_t seed) {
 }
 
 static int32_t sFtol(float value) { return static_cast<int32_t>(std::nearbyintf(value)); }
+
+static float sourcePow(float base, float exponent) {
+  if (base == 0.0f || std::isnan(base)) return base;
+  return std::pow(base, exponent);
+}
 
 static int32_t range7fff(int32_t value) {
   if (static_cast<uint32_t>(value) < 0x7fffu) return value;
@@ -125,7 +132,7 @@ static std::vector<Color64> cell(int xsize, int ysize, uint32_t col0, uint32_t c
   const Color64 c1 = getColor64(col0);
   const Color64 cb = getColor64(col2);
 
-  aspect = std::pow(2.0f, aspect);
+  aspect = sourcePow(2.0f, aspect);
   float aspdiv;
   int aspf;
   bool flipxy;
@@ -205,7 +212,7 @@ static std::vector<Color64> cell(int xsize, int ysize, uint32_t col0, uint32_t c
             const float v1 = std::sqrt(static_cast<float>(best2)) * aspdiv;
             v0 = (v0 + v1 > 0.00001f) ? (v1 - v0) / (v1 + v0) : 0.0f;
           }
-          int val = range7fff(static_cast<int>(std::pow(v0 * amp, gamma) * 0x8000)) * 2;
+          int val = range7fff(static_cast<int>(sourcePow(v0 * amp, gamma) * 0x8000)) * 2;
           if (mode & 4) val = 0x10000 - val;
 
           if (mode & 2) {

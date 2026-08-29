@@ -12,6 +12,7 @@ import {
   mat4Identity,
   mat4MulA,
   mat4SRT,
+  sFPow,
 } from './core.js';
 import { FONT3D_FAMILIES } from './font3d_glyphs.js';
 import { libtess } from './libtess.js';
@@ -2315,16 +2316,21 @@ function MinMesh_Explode(input, bitmap, ...p) {
         bitmapSample,
       );
       const sample = bitmapSample[0];
-      delay = sample ? -toDistance * Math.pow(1 - sample / 32767, toPower) : -9999;
+      const base = f32(1 - f32(sample / 32767));
+      delay = sample ? f32(-toDistance * sFPow(base, toPower)) : -9999;
     } else if (mode & 1) {
       const projection = dot3(radial, towardsScaled);
       const offAxis = sub3(radial, scale3(cloneVector(towards), projection));
       let distance = Math.sqrt(dot3(offAxis, offAxis)) - toPower;
       if (distance < 0) { distance = distance < -toPower ? 0 : toPower + distance; delay = projection - Math.sqrt(toPower * toPower - distance * distance) / Math.sqrt(towardsDiv); distance = 0; }
       else delay = projection;
-      delay = -toDistance * distance - delay;
-    } else delay = -toDistance * Math.pow(dot3(radial, radial), toPower);
-    delay = f32(delay - toConstant - random.float() * toRandom);
+      delay = f32(f32(-toDistance * distance) - delay);
+    } else {
+      const radius2 = f32(f32(f32(radial[0] * radial[0]) +
+        f32(radial[1] * radial[1])) + f32(radial[2] * radial[2]));
+      delay = f32(-toDistance * sFPow(radius2, toPower));
+    }
+    delay = f32(delay + f32(-toConstant - f32(random.float() * toRandom)));
     const noAnimation = translationMatrix(centerOfFace[0], centerOfFace[1], centerOfFace[2]);
     let kinetic;
     if (mode & 4) {

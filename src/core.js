@@ -63,6 +63,46 @@
     return scratch.getUint32(0, true);
   }
 
+  // Released _types.cpp sFPow is a handwritten x87 routine, not the CRT pow.
+  // FYL2X and F2XM1 keep their transcendental result internally, while the
+  // surrounding arithmetic observes the player's 24-bit x87 precision mode.
+  // The FTST shortcut is especially visible: either signed zero is returned
+  // unchanged for every exponent, including 0^0.
+  function sFPow(base, exponent) {
+    if (base === 0 || Number.isNaN(base)) return base;
+    if (!(base > 0) || !Number.isFinite(base) || !Number.isFinite(exponent)) return 0;
+
+    const logarithm = exponent * Math.log2(base);
+    // FIST stores a signed dword. An out-of-range result becomes x87's integer
+    // indefinite value, which the routine subsequently takes as underflow.
+    if (!Number.isFinite(logarithm) ||
+        logarithm < -0x80000000 - 0.5 || logarithm >= 0x7fffffff + 0.5) return 0;
+    const lower = Math.floor(logarithm);
+    const fractionFromLower = logarithm - lower;
+    const integral = fractionFromLower < 0.5
+      ? lower
+      : fractionFromLower > 0.5
+        ? lower + 1
+        : (lower & 1) ? lower + 1 : lower;
+    let scaleExponent = integral;
+    if (integral >= 0x7fffc001) {
+      // ADD EAX,0x3fff overflows for the top 16,383 valid FIST results. Its
+      // flags bypass both range branches, so FLD reads the wrapped low 15 bits
+      // as the handcrafted extended exponent (for example 2^INT_MAX -> 0.5).
+      scaleExponent = ((integral + 0x3fff) & 0x7fff) - 0x3fff;
+    } else {
+      if (integral <= -0x3fff) return 0;
+      if (integral >= 0x4000) return Infinity;
+    }
+
+    // FISUB and the add after F2XM1 each round at PC=24. Scaling by an exact
+    // power of two changes only the exponent, so the returned Number retains
+    // the same significand as the native sF64 return value.
+    const fractional = f32(logarithm - integral);
+    const mantissa = f32((Math.pow(2, fractional) - 1) + 1);
+    return mantissa * Math.pow(2, scaleExponent);
+  }
+
   function clamp(value, max, min) {
     return value >= max ? max : value <= min ? min : value;
   }
@@ -416,6 +456,7 @@ export {
   mat4TransformPoint,
   mulDiv,
   mulShift,
+  sFPow,
   sseSinCos,
   vec3Cross,
   vec3Normalize,

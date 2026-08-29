@@ -11,6 +11,7 @@ import {
   mat4MulA,
   mat4SRT,
   mat4TransformPoint,
+  sFPow,
   sseSinCos,
   vec3Normalize,
   vec3NormalizeSafe,
@@ -22,6 +23,24 @@ assert.deepEqual(
   [random.uint32(), random.uint32(), random.uint32(), random.uint32()],
   [0xe0d66cbe, 0x7bcd124b, 0x6fd0b046, 0xafdb0a35],
 );
+
+// Direct calls to released _types.cpp sFPow (0x8106d0), captured under the
+// player's 0x103f x87 control word. These positive inputs each differ by one
+// ULP from a narrowed Math.pow result and exercise both sides of that error.
+const powInputs = new Float32Array(Uint32Array.from([0x3d34e1c3, 0x3d6238a1]).buffer);
+assert.equal(sFPow(powInputs[0], 0.5), 0.2101442813873291);
+assert.equal(sFPow(powInputs[1], 0.5), 0.23501017689704895);
+assert.equal(f32ToBits(sFPow(powInputs[0], 0.5)), 0x3e573010);
+assert.equal(f32ToBits(sFPow(powInputs[1], 0.5)), 0x3e70a682);
+// FTST takes the zero branch before looking at the exponent.
+assert.equal(Object.is(sFPow(0, 0), 0), true);
+assert.equal(Object.is(sFPow(0, -1), 0), true);
+assert.equal(Object.is(sFPow(-0, 0), -0), true);
+assert.equal(Object.is(sFPow(-0, -1), -0), true);
+assert.equal(sFPow(-1, 2), 0);
+assert.equal(sFPow(Infinity, 2), 0);
+assert.equal(sFPow(2, 0x7fffffff), 0.5);
+assert.equal(sFPow(2, 0x7fffffff + 0.5), 0);
 
 const identity = mat4Identity();
 const srt = mat4SRT(new Float32Array([2, 3, 4, 0, 0, 0, 5, 6, 7]));

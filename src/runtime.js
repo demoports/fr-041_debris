@@ -8,6 +8,7 @@ import {
   mat4Euler,
   mat4Mul3,
   mat4MulA,
+  sFPow,
 } from './core.js';
 import {
   KC_ANY,
@@ -1390,7 +1391,7 @@ class Environment {
             else if (base === KA.MUL) left[i] = f32(left[i] * right[i]);
             else if (base === KA.DIV) left[i] = f32(left[i] / right[i]);
             else if (base === KA.MOD) left[i] = f32(left[i] % right[i]);
-            else left[i] = f32(Math.pow(left[i], right[i]));
+            else left[i] = f32(sFPow(left[i], right[i]));
           }
           break;
         }
@@ -1467,7 +1468,7 @@ class Environment {
           // This multiplier is intentionally ln(2), exactly as in kdoc.cpp.
           for (let i = 0; i < 4; i++) top()[i] = f32(Math.log(top()[i]) * 0.6931471805599453);
           break;
-        case KA.POW2: for (let i = 0; i < 4; i++) top()[i] = f32(Math.pow(2, top()[i])); break;
+        case KA.POW2: for (let i = 0; i < 4; i++) top()[i] = f32(sFPow(2, top()[i])); break;
         case KA.STOREVAR: {
           const index = readU8(), value = pop();
           if (index >= MAX_VARS || this._varSaves.length >= MAX_VAR_SAVES) throw new Error('animation variable save outside range');

@@ -728,6 +728,16 @@ assert.equal(delayMappedExplosion.animation.matrices[0].offset,
   Math.fround(-(1 - 8192 / 32767)),
   'Explode delay-map V uses the native XSize coordinate scale');
 
+// The sampled division, subtraction, sFPow multiply, Offset store, and later
+// compound update all execute under the player's PC=24 control word.
+const explodeRoundingMap = new D.Bitmap(4, 2);
+explodeRoundingMap.data.fill(32);
+const roundedDelayExplosion = D.MinMesh_Explode(explodeDelayProbe, explodeRoundingMap,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 1, 1, 0, 0, 0,
+  0, 0, 1, 0, 0);
+assert.equal(D.f32ToBits(roundedDelayExplosion.animation.matrices[0].offset), 0xbf7fc000);
+
 // Non-browser callers may install an explicit adapter; production never
 // silently substitutes block geometry when real outline extraction fails.
 D.setMinMeshFontAdapter(({ height, extrude }) => D.fontPolygonsToMinMesh([{

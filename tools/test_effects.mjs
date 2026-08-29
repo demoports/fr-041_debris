@@ -110,6 +110,8 @@ const waveSpline = { blobSpline: { keys: [{
 const waved = D.buildWaterGeometry(waveSpline, [8, 1, 2, 1, 1, 3], 0.1, water);
 assert.equal(waved, water);
 const retainedWaveTable = waved._waterScratch.waves[0].values;
+assert.equal(D.f32ToBits(retainedWaveTable[0]), 0xbd8212e7,
+  'Water rounds every sF32 power, damping, phase, and waveform assignment');
 D.buildWaterGeometry(waveSpline, [8, 1, 2, 1, 1, 3], 0.2, water);
 assert.equal(water._waterScratch.waves[0].values, retainedWaveTable);
 assert.equal(waved.waveCount, 1);

@@ -1,4 +1,4 @@
-import { Random } from './core.js';
+import { Random, sFPow } from './core.js';
 
   // genbitmap.cpp stores one pixel in an sU64.  Keeping the four words
   // separate is both considerably faster in JS and documents the browser
@@ -644,8 +644,8 @@ import { Random } from './core.js';
     for (let index = 0; index <= 1024; index++) {
       const coordinate = f32(index / 1024);
       const strength = oldFalloff
-        ? f32(Math.pow(f32(1 - coordinate), power) * alpha15)
-        : f32(f32(1 - Math.pow(coordinate, newFalloffExponent)) * alpha15);
+        ? f32(sFPow(f32(1 - coordinate), power) * alpha15)
+        : f32(f32(1 - sFPow(coordinate, newFalloffExponent)) * alpha15);
       gamma[index] = clamp15(strength) * 2;
     }
     // Values close to zero have slopes too steep for the coarser table.
@@ -653,8 +653,8 @@ import { Random } from './core.js';
     for (let index = 0; index < 32; index++) {
       const coordinate = f32(index / 32768);
       const strength = oldFalloff
-        ? f32(Math.pow(f32(1 - coordinate), power) * alpha15)
-        : f32(f32(1 - Math.pow(coordinate, newFalloffExponent)) * alpha15);
+        ? f32(sFPow(f32(1 - coordinate), power) * alpha15)
+        : f32(f32(1 - sFPow(coordinate, newFalloffExponent)) * alpha15);
       low[index] = clamp15(strength) * 2;
     }
     tables = { gamma, low };
@@ -760,7 +760,7 @@ import { Random } from './core.js';
       // x87's precision control at single: the base, pow result, and both
       // products are rounded to sF32 before the ordinary truncating store.
       const coordinate = f32(f32(i * 32 + 0.01) / 32768);
-      const curved = f32(Math.pow(coordinate, exponent));
+      const curved = f32(sFPow(coordinate, exponent));
       table[i] = trunc(f32(f32(curved * 32768) * brightness));
     }
     let hueFixed = trunc(f32(f32(hue * 6) * 65536)) % (6 * 65536);
@@ -1065,14 +1065,14 @@ import { Random } from './core.js';
       tx = f32(f32(f32(tx - 0.5) / f32(span)) + 0.5);
       ty = f32(f32(f32(ty - 0.5) / f32(span)) + 0.5);
       const inverseSpan = f32(1 / f32(span));
-      sx = f32(Math.pow(sx, inverseSpan)); sy = f32(Math.pow(sy, inverseSpan));
+      sx = f32(sFPow(sx, inverseSpan)); sy = f32(sFPow(sy, inverseSpan));
     } else {
       const countFloat = f32(count);
       angle = f32(angle / countFloat);
       tx = f32(f32(f32(tx - 0.5) / countFloat) + 0.5);
       ty = f32(f32(f32(ty - 0.5) / countFloat) + 0.5);
       const inverseCount = f32(1 / countFloat);
-      sx = f32(Math.pow(sx, inverseCount)); sy = f32(Math.pow(sy, inverseCount));
+      sx = f32(sFPow(sx, inverseCount)); sy = f32(sFPow(sy, inverseCount));
     }
     sx = f32(sx * signX); sy = f32(sy * signY);
     while (count-- > 0) {
@@ -1227,7 +1227,7 @@ import { Random } from './core.js';
           const light = f32(f32(f32(dx * nx) + f32(dy * ny)) + f32(dz * nz));
           let specFactor = f32(f32(f32(hx * nx) + f32(hy * ny)) + f32(hz * nz));
           if (specFactor < 0) specFactor = 0;
-          specFactor = f32(Math.pow(f32(specFactor * directionalHalfInverse), specPower));
+          specFactor = f32(sFPow(f32(specFactor * directionalHalfInverse), specPower));
           const strength = f32(light * amp);
           for (let c = 0; c < 4; c++) {
             const lighting = f32(ambient[c] + f32(diffuse[c] * strength));
@@ -1277,13 +1277,13 @@ import { Random } from './core.js';
           : f32(1 / (Math.sqrt(f32(f32(f32(hx * hx) + f32(hy * hy)) + f32(hz * hz))) || 1));
         specFactor = f32(f32(f32(hx * nx) + f32(hy * ny)) + f32(hz * nz));
         if (specFactor < 0) specFactor = 0;
-        specFactor = f32(Math.pow(f32(specFactor * inverse), specPower));
+        specFactor = f32(sFPow(f32(specFactor * inverse), specPower));
       }
       let direction = 1;
       if (subcode === 0) {
         direction = f32(f32(f32(lx * dx) + f32(ly * dy)) + f32(lz * dz));
         direction = direction < outer ? 0
-          : f32(Math.pow(f32(f32(direction - outer) / f32(1 - outer)), falloff));
+          : f32(sFPow(f32(f32(direction - outer) / f32(1 - outer)), falloff));
       }
       const strength = f32(f32(direction * light) * amp);
       for (let c = 0; c < 4; c++) {
@@ -1350,7 +1350,7 @@ import { Random } from './core.js';
     fadeoff = f32(fadeoff); amplitude = f32(amplitude); gamma = f32(gamma);
     const gammaTable = new Int32Array(1025);
     for (let i = 0; i < 1025; i++) {
-      gammaTable[i] = clamp15(Math.pow(i / 1024, gamma) * 0x8000) * 2;
+      gammaTable[i] = clamp15(sFPow(i / 1024, gamma) * 0x8000) * 2;
     }
     amplitude = f32(amplitude * ((mode & 1) ? 0x8000 : 0x4000));
     const amplitudeFixed = roundEven(amplitude);
@@ -1489,7 +1489,7 @@ import { Random } from './core.js';
     const shiftX = 14 - powerOfTwo(bitmap.width), shiftY = 14 - powerOfTwo(bitmap.height);
     const c0 = packedColor(color1), c1 = packedColor(color0), cb = packedColor(color2);
     // aspect, aspf and aspdiv are all sF32 in the released code.
-    const aspect = f32(Math.pow(2, aspectParameter));
+    const aspect = f32(sFPow(2, aspectParameter));
     const aspectFixed = aspect >= 1
       ? trunc(f32(65536 / f32(aspect * aspect)))
       : trunc(f32(f32(aspect * aspect) * 65536));
@@ -1516,14 +1516,15 @@ import { Random } from './core.js';
           if (distance < best) { second = best; best = distance; bestIndex = i; }
           else if (distance > best && distance < second) second = distance;
         }
-        // v0 and v1 are sF32 locals, so each assignment rounds to single
-        // precision before the next step reads it (genbitmap.cpp:2881-2890).
-        let value = f32(Math.sqrt(best) * divisor);
+        // The player's PC=24 control word rounds FSQRT before the multiply;
+        // assigning the result to the sF32 local rounds that multiply again
+        // (genbitmap.cpp:2881-2890).
+        let value = f32(f32(Math.sqrt(best)) * divisor);
         if (mode & 1) {
-          const v1 = f32(Math.sqrt(second) * divisor);
+          const v1 = f32(f32(Math.sqrt(second)) * divisor);
           value = f32(value + v1) > 0.00001 ? f32((v1 - value) / (v1 + value)) : 0;
         }
-        let fade = clamp15(f32(Math.pow(f32(value * amplitude), gamma)) * 0x8000) * 2;
+        let fade = clamp15(f32(sFPow(f32(value * amplitude), gamma)) * 0x8000) * 2;
         if (mode & 4) fade = 0x10000 - fade;
         const offset4 = (y * bitmap.width + x) * 4;
         if (mode & 2) {
@@ -1607,13 +1608,13 @@ import { Random } from './core.js';
               } else if (distance > best && distance < second) second = distance;
             }
 
-            // Same sF32 narrowing as the scalar path above.
-            let value = f32(Math.sqrt(best) * divisor);
+            // Same PC=24 FSQRT and sF32 multiply narrowing as above.
+            let value = f32(f32(Math.sqrt(best)) * divisor);
             if (mode & 1) {
-              const v1 = f32(Math.sqrt(second) * divisor);
+              const v1 = f32(f32(Math.sqrt(second)) * divisor);
               value = f32(value + v1) > 0.00001 ? f32((v1 - value) / (v1 + value)) : 0;
             }
-            let fade = clamp15(f32(Math.pow(f32(value * amplitude), gamma)) * 0x8000) * 2;
+            let fade = clamp15(f32(sFPow(f32(value * amplitude), gamma)) * 0x8000) * 2;
             if (mode & 4) fade = 0x10000 - fade;
             const offset4 = ((by + ty) * bitmap.width + bx + tx) * 4;
             if (mode & 2) {
@@ -1678,7 +1679,7 @@ import { Random } from './core.js';
       const shadow = f32(values[channel]), midtone = f32(values[channel + 3]);
       const highlight = f32(values[channel + 6]);
       const exponentArgument = f32(f32(f32(shadow * 0.5) + midtone) + f32(highlight * 0.5));
-      const exponent = f32(Math.pow(0.5, exponentArgument));
+      const exponent = f32(sFPow(0.5, exponentArgument));
       const minimum = f32(-Math.min(shadow, 0) * scale);
       const maximum = f32(1 - f32(Math.max(highlight, 0) * scale));
       const multiplier = f32(1 / f32(maximum - minimum));
@@ -1686,7 +1687,7 @@ import { Random } from './core.js';
         const coordinate = f32(i / 256);
         const bounded = Math.max(minimum, Math.min(maximum, coordinate));
         const normalized = f32(f32(bounded - minimum) * multiplier);
-        const mapped = f32(Math.pow(normalized, exponent));
+        const mapped = f32(sFPow(normalized, exponent));
         tables[channel][i] = clamp15(f32(mapped * 32768));
       }
     }
@@ -1791,7 +1792,7 @@ import { Random } from './core.js';
     // whose fixed fade lands immediately on opposite sides of an integer.
     colorBalance = f32(colorBalance);
     const randomColorFade = () => trunc(f32(
-      f32(Math.pow(random.float(), colorBalance)) * 0x10000,
+      f32(sFPow(random.float(), colorBalance)) * 0x10000,
     ));
     let current = new Uint16Array(4);
     fadePixel(current, 0, c0, 0, c1, 0, randomColorFade());
