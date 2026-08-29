@@ -13,6 +13,9 @@ Original credits: **fiver2** — visuals and direction; **chaos / ryg** — code
 **ronny** — soundtrack; **kb** — synthesizer; **wayfinder** — sound effects;
 **giZMo / tron / fried**.
 
+For contemporary background, see Hugi 33's
+[“Magic Debris — fiver2 in focus” interview](https://www.hugi.scene.org/online/hugise03/hugi%2033%20-%20demoscene%20interviews%20magic%20debris%20-%20fiver2%20in%20focus.htm#:~:text=kkrieger%2C%20Of%20spirits%20taken%20and%20Die%20Ewigkeit,we%20could%20finish%20it%20for%20breakpoint%202007.).
+
 ## Port design
 
 | Area | Browser implementation |
