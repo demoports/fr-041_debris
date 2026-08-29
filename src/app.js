@@ -16,6 +16,7 @@ const DEFAULT_RATE = 44100;
 const PRODUCTION_ASPECT = 2;
 const REFERENCE_REPLAY_FPS = 30;
 const MAX_DEBUG_SECONDS = 3600;
+const MINMESH_FONT3D_CLASS_ID = 0x0133;
 const DEFAULT_PLAYBACK_WARMUP_BYTES = 256 * 1024 * 1024;
 const DEFAULT_PLAYBACK_WARMUP_RESOURCE_BYTES = 64 * 1024 * 1024;
 const DEFAULT_SNAPSHOT_BUDGET_BYTES = 32 * 1024 * 1024;
@@ -807,6 +808,31 @@ function pruneImmutablePlaybackCaches(runtime) {
 function collectPlaybackResourcePlan(runtime) {
   const operations = runtime?.operations || [];
   const operationSet = new Set(operations);
+  // Native converts every scene MinMesh to EngMesh and preloads it before
+  // playback. The bounded WebGL warm-up cannot do that for the entire graph,
+  // but Font3D-derived meshes are small enough to prioritize and otherwise
+  // produce a visible first-frame hitch at every exploded greeting.
+  const fontDerivedMemo = new Map();
+  const fontDerivedActive = new Set();
+  const isFontDerivedOperation = operation => {
+    if (!operation || !operationSet.has(operation)) return false;
+    if (fontDerivedMemo.has(operation)) return fontDerivedMemo.get(operation);
+    if (fontDerivedActive.has(operation)) return false;
+    fontDerivedActive.add(operation);
+    const derived = operation.classId === MINMESH_FONT3D_CLASS_ID ||
+      (operation.inputs || []).some(isFontDerivedOperation);
+    fontDerivedActive.delete(operation);
+    fontDerivedMemo.set(operation, derived);
+    return derived;
+  };
+  const fontDerivedCaches = new Set();
+  for (const operation of operations) {
+    const cache = operation?.cache;
+    const kind = String(cache?.kind || '').toLowerCase();
+    if ((kind === 'mesh' || kind === 'minmesh') && isFontDerivedOperation(operation)) {
+      fontDerivedCaches.add(cache);
+    }
+  }
   const ownerIds = new Map();
   for (const operation of operations) {
     if (operation?.cache && !ownerIds.has(operation.cache)) {
@@ -816,25 +842,36 @@ function collectPlaybackResourcePlan(runtime) {
   const tasks = [];
   const meshes = new Set();
   const materials = new Set();
+  const taskByValue = new Map();
   const visited = new Set();
   const visitedOperations = new Set();
   const semanticKeys = new Set([
     'children', 'drawMesh', 'effect', 'material', 'materials',
     'texture', 'textures', 'geometry', 'mesh', 'clusters', '_clusters',
   ]);
-  const visit = value => {
+  const visit = (value, inheritedPriority = null, priorityEligible = false) => {
     if (!value || typeof value !== 'object' || ArrayBuffer.isView(value) ||
-        value instanceof ArrayBuffer || operationSet.has(value) || visited.has(value)) return;
+        value instanceof ArrayBuffer || operationSet.has(value)) return;
+    const priority = priorityEligible && fontDerivedCaches.has(value)
+      ? 'font3d' : inheritedPriority;
+    if (visited.has(value)) {
+      const task = taskByValue.get(value);
+      if (priority && task && !task.priority) task.priority = priority;
+      return;
+    }
     visited.add(value);
     if (Array.isArray(value)) {
-      for (const item of value) visit(item);
+      for (const item of value) visit(item, priority, priorityEligible);
       return;
     }
     const kind = String(value.kind || '').toLowerCase();
     if (kind === 'mesh' || kind === 'minmesh') {
       if (!meshes.has(value)) {
         meshes.add(value);
-        tasks.push({ kind: 'mesh', value, sourceId: ownerIds.get(value) });
+        const task = { kind: 'mesh', value, sourceId: ownerIds.get(value) };
+        if (priority) task.priority = priority;
+        tasks.push(task);
+        taskByValue.set(value, task);
       }
       // Compacted MinMesh stores its material-bearing clusters behind the
       // ordinary `clusters` accessor. Read only the owned compact descriptor
@@ -844,13 +881,17 @@ function collectPlaybackResourcePlan(runtime) {
         Object.getOwnPropertyDescriptor(compact, 'clusters')?.value;
       if (Array.isArray(compactClusters)) {
         for (const cluster of compactClusters) {
-          visit(Object.getOwnPropertyDescriptor(cluster, 'material')?.value);
+          visit(Object.getOwnPropertyDescriptor(cluster, 'material')?.value,
+            priority, priorityEligible);
         }
       }
     } else if (kind === 'material') {
       if (!materials.has(value)) {
         materials.add(value);
-        tasks.push({ kind: 'material', value, sourceId: ownerIds.get(value) });
+        const task = { kind: 'material', value, sourceId: ownerIds.get(value) };
+        if (priority) task.priority = priority;
+        tasks.push(task);
+        taskByValue.set(value, task);
       }
     } else if (kind === 'bitmap') {
       // Texture tasks are derived later from each compiled material pass. A
@@ -861,32 +902,36 @@ function collectPlaybackResourcePlan(runtime) {
       if (!semanticKeys.has(key) || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
         continue;
       }
-      visit(descriptor.value);
+      visit(descriptor.value, priority, priorityEligible);
     }
   };
 
-  const visitOperation = operation => {
+  const visitOperation = (operation, priorityEligible = false) => {
     if (!operation || visitedOperations.has(operation)) return;
     visitedOperations.add(operation);
     const cache = operation.cache;
-    visit(cache);
+    visit(cache, null, priorityEligible);
     const kind = String(cache?.kind || '').toLowerCase();
     // Semantic caches already capture everything their playback handler uses;
     // crossing them would warm the procedural construction DAG as well.
     if (kind === 'mesh' || kind === 'minmesh' || kind === 'material' ||
         kind === 'scene' || kind === 'effect' || kind === 'bitmap') return;
-    for (const input of operation.inputs || []) visitOperation(input);
-    for (const link of operation.links || []) visitOperation(link);
+    for (const input of operation.inputs || []) visitOperation(input, priorityEligible);
+    for (const link of operation.links || []) visitOperation(link, priorityEligible);
   };
   const events = Array.from(runtime?.events || []).sort((a, b) =>
     ((a?.start ?? 0) - (b?.start ?? 0)) || ((a?.op?.id ?? 0) - (b?.op?.id ?? 0)));
-  for (const event of events) visitOperation(event?.op);
+  // Only event-captured Font3D assets are transition-critical. Root/table
+  // fallback keeps dormant authoring alternatives discoverable for ordinary
+  // bounded warm-up without granting them scarce priority residency.
+  for (const event of events) visitOperation(event?.op, true);
   for (const root of runtime?.roots || []) visitOperation(root);
   for (const operation of operations) visitOperation(operation);
   return {
     tasks,
     meshes: meshes.size,
     materials: materials.size,
+    priorityMeshes: tasks.filter(task => task.kind === 'mesh' && task.priority).length,
   };
 }
 

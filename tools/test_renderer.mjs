@@ -1480,12 +1480,18 @@ assert.deepEqual(selectedAuthored.map(light => light.opId), [9],
 {
   const warmBitmap = { width: 2, height: 2, data: new Uint16Array(16) };
   const warmMaterial = { kind: 'material', passes: [{ usage: 'shadow' }] };
+  const priorityMaterial = { kind: 'material', passes: [{ usage: 'base' }] };
   const warmMesh = {
     kind: 'mesh',
     hasAnimation: () => false,
     storageSummary: () => ({ vertices: 3, faces: 1 }),
   };
   const animatedMesh = {
+    kind: 'minmesh',
+    hasAnimation: () => true,
+    storageSummary: () => ({ vertices: 3, faces: 1, bones: 1 }),
+  };
+  const priorityAnimatedMesh = {
     kind: 'minmesh',
     hasAnimation: () => true,
     storageSummary: () => ({ vertices: 3, faces: 1, bones: 1 }),
@@ -1504,6 +1510,7 @@ assert.deepEqual(selectedAuthored.map(light => light.opId), [9],
     uploadBytes: 100,
   };
   const geometryEntries = new WeakMap();
+  const animatedPools = new WeakMap();
   const allEntries = new Set();
   const textureEntries = new WeakMap();
   let textureBytes = 0, yields = 0, flushes = 0, finishes = 0, layerCreates = 0;
@@ -1519,8 +1526,22 @@ assert.deepEqual(selectedAuthored.map(light => light.opId), [9],
     height: 8,
     geometry: {
       entries: geometryEntries,
+      animatedPools,
       allEntries,
-      get(mesh) {
+      get(mesh, time) {
+        if (mesh === priorityAnimatedMesh) {
+          let pool = animatedPools.get(mesh);
+          if (!pool) {
+            const animatedEntry = {
+              ...entry, groups: [], shadowTopologies: new Map(), dynamic: true,
+            };
+            pool = { entries: [animatedEntry] };
+            animatedPools.set(mesh, pool);
+            allEntries.add(animatedEntry);
+          }
+          assert.equal(time, 0);
+          return pool.entries[0];
+        }
         let result = geometryEntries.get(mesh);
         if (!result) {
           assert.equal(mesh, warmMesh);
@@ -1568,6 +1589,8 @@ assert.deepEqual(selectedAuthored.map(light => light.opId), [9],
     { kind: 'mesh', value: warmMesh, sourceId: 91 },
     { kind: 'material', value: warmMaterial, sourceId: 92 },
     { kind: 'mesh', value: animatedMesh, sourceId: 93 },
+    { kind: 'mesh', value: priorityAnimatedMesh, sourceId: 94, priority: 'font3d' },
+    { kind: 'material', value: priorityMaterial, sourceId: 95, priority: 'font3d' },
   ] };
   const warmOptions = {
     budgetMilliseconds: 8,
@@ -1579,11 +1602,14 @@ assert.deepEqual(selectedAuthored.map(light => light.opId), [9],
   const firstWarm = await D.Renderer.prototype.prewarmResources.call(
     warmRenderer, warmPlan, warmOptions,
   );
-  assert.equal(firstWarm.warmedMeshes, 1);
+  assert.equal(firstWarm.warmedMeshes, 2);
+  assert.equal(firstWarm.warmedAnimatedMeshes, 1);
   assert.equal(firstWarm.warmedTextures, 1);
   assert.equal(firstWarm.warmedShadowTopologies, 1);
   assert.equal(firstWarm.skippedAnimatedMeshes, 1);
   assert.equal(firstWarm.plannedTextures, 1);
+  assert.equal(firstWarm.priorityTasks, 3,
+    'priority propagates from a material to its already-planned shared texture');
   assert.ok(firstWarm.newResidentBytes > 0);
   assert.ok(yields > 0);
   assert.equal(finishes, 1);
@@ -1593,7 +1619,8 @@ assert.deepEqual(selectedAuthored.map(light => light.opId), [9],
   const secondWarm = await D.Renderer.prototype.prewarmResources.call(
     warmRenderer, warmPlan, warmOptions,
   );
-  assert.equal(secondWarm.cachedMeshes, 1);
+  assert.equal(secondWarm.cachedMeshes, 2);
+  assert.equal(secondWarm.cachedAnimatedMeshes, 1);
   assert.equal(secondWarm.cachedTextures, 1);
   assert.equal(secondWarm.warmedShadowTopologies, 0);
   assert.equal(secondWarm.newResidentBytes, 0,

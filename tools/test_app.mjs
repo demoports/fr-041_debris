@@ -707,6 +707,9 @@ assert.equal(immutablePlaybackStats.pendingIdentities, 0);
   const earlyMinMesh = {
     kind: 'minmesh', _compact: { clusters: [{ material: materialB }] },
   };
+  const dormantMinMesh = {
+    kind: 'minmesh', _compact: { clusters: [] },
+  };
   let accessorReads = 0;
   const earlyScene = { kind: 'scene', children: [], drawMesh: earlyMinMesh };
   Object.defineProperty(earlyScene, 'forbidden', {
@@ -719,21 +722,34 @@ assert.equal(immutablePlaybackStats.pendingIdentities, 0);
   const lateMeshOp = { id: 202, cache: lateMesh };
   const materialAOp = { id: 203, cache: materialA };
   const materialBOp = { id: 204, cache: materialB };
+  const fontOp = { id: 200, classId: 0x0133, cache: null, inputs: [] };
+  earlyMeshOp.classId = 0x0120;
+  earlyMeshOp.inputs = [fontOp];
+  const dormantFontOp = { id: 207, classId: 0x0133, cache: null, inputs: [] };
+  const dormantMeshOp = {
+    id: 208, classId: 0x0120, cache: dormantMinMesh, inputs: [dormantFontOp],
+  };
   const earlySceneOp = { id: 205, cache: earlyScene };
   const lateSceneOp = { id: 206, cache: lateScene };
   const plan = D.collectPlaybackResourcePlan({
-    operations: [lateSceneOp, materialAOp, lateMeshOp, earlySceneOp, materialBOp, earlyMeshOp],
-    roots: [],
+    operations: [lateSceneOp, materialAOp, lateMeshOp, earlySceneOp, materialBOp, earlyMeshOp,
+      fontOp, dormantFontOp, dormantMeshOp],
+    roots: [dormantMeshOp],
     events: [
       { start: 20, op: lateSceneOp },
       { start: 10, op: earlySceneOp },
     ],
   });
   assert.equal(accessorReads, 0);
-  assert.equal(plan.meshes, 2);
+  assert.equal(plan.meshes, 3);
   assert.equal(plan.materials, 2);
+  assert.equal(plan.priorityMeshes, 1);
   assert.deepEqual(plan.tasks.map(task => [task.kind, task.sourceId]), [
     ['mesh', 201], ['material', 204], ['mesh', 202], ['material', 203],
+    ['mesh', 208],
+  ]);
+  assert.deepEqual(plan.tasks.map(task => task.priority || null), [
+    'font3d', 'font3d', null, null, null,
   ]);
 }
 

@@ -4143,7 +4143,7 @@ class Renderer {
     // their compiled pass maps. This excludes linked-but-unused bitmap slots
     // without evaluating a timeline frame or invoking any effect handler.
     const tasks = [];
-    const textureIdentities = new Set();
+    const textureTasks = new Map();
     for (const task of plan?.tasks || []) {
       if (task?.kind !== 'material') {
         tasks.push(task);
@@ -4157,13 +4157,25 @@ class Renderer {
         for (const sourceIndex of view.textureMap || []) {
           if (sourceIndex === null || sourceIndex === undefined) continue;
           const bitmap = view.textures?.[sourceIndex];
-          if (!bitmap || textureIdentities.has(bitmap)) continue;
-          textureIdentities.add(bitmap);
-          tasks.push({ kind: 'texture', value: bitmap });
+          if (!bitmap) continue;
+          const existing = textureTasks.get(bitmap);
+          if (existing) {
+            if (task.priority && !existing.priority) existing.priority = task.priority;
+            continue;
+          }
+          const textureTask = { kind: 'texture', value: bitmap };
+          if (task.priority) textureTask.priority = task.priority;
+          textureTasks.set(bitmap, textureTask);
+          tasks.push(textureTask);
         }
       }
     }
     tasks.push({ kind: 'infrastructure', value: null });
+    // Font3D greetings appear late enough that a chronological residency cap
+    // may otherwise be exhausted first. Stable partitioning retains authored
+    // order within each class while ensuring these small transition-critical
+    // resources are admitted before optional general warm-up work.
+    tasks.sort((left, right) => Number(Boolean(right?.priority)) - Number(Boolean(left?.priority)));
 
     const baselineResidentBytes = this.warmupResidentBytes();
     const stats = {
@@ -4171,10 +4183,13 @@ class Renderer {
       plannedTasks: tasks.length,
       plannedMeshes: tasks.filter(task => task?.kind === 'mesh').length,
       plannedMaterials: tasks.filter(task => task?.kind === 'material').length,
-      plannedTextures: textureIdentities.size,
+      plannedTextures: textureTasks.size,
+      priorityTasks: tasks.filter(task => task?.priority).length,
       completedTasks: 0,
       warmedMeshes: 0,
       cachedMeshes: 0,
+      warmedAnimatedMeshes: 0,
+      cachedAnimatedMeshes: 0,
       warmedTextures: 0,
       cachedTextures: 0,
       warmedShadowTopologies: 0,
@@ -4216,9 +4231,16 @@ class Renderer {
       }
       if (task?.kind === 'mesh') {
         const mesh = task.value;
-        if (meshHasAnimation(mesh)) stats.skippedAnimatedMeshes++;
+        const animated = meshHasAnimation(mesh);
+        // General animated scenes remain lazy to preserve the bounded memory
+        // policy. Font3D-derived meshes are explicitly prioritized: warming
+        // time zero creates their reusable scratch slot, VAO/buffers and
+        // shadow topology before the authored greeting cut reaches them.
+        if (animated && !task.priority) stats.skippedAnimatedMeshes++;
         else {
-          const existing = this.geometry.entries.get(mesh);
+          const existing = animated
+            ? this.geometry.animatedPools?.get(mesh)?.entries?.[0]
+            : this.geometry.entries.get(mesh);
           const summary = mesh?.storageSummary?.() || {};
           const shadowEstimate = this.shadows
             ? Math.max(0, Number(summary.vertices) || 0) * 28 +
@@ -4226,9 +4248,14 @@ class Renderer {
             : 0;
           const estimate = existing ? 0 : geometryWarmupEstimateBytes(mesh) + shadowEstimate;
           if (existing || admitted(estimate)) {
-            const entry = this.geometry.get(mesh, undefined, task.sourceId);
-            if (existing) stats.cachedMeshes++;
-            else stats.warmedMeshes++;
+            const entry = this.geometry.get(mesh, animated ? 0 : undefined, task.sourceId);
+            if (existing) {
+              stats.cachedMeshes++;
+              if (animated) stats.cachedAnimatedMeshes++;
+            } else {
+              stats.warmedMeshes++;
+              if (animated) stats.warmedAnimatedMeshes++;
+            }
             if (this.shadows) {
               const shadowGroups = shadowGroupsForGeometry(entry);
               if (shadowGroups.length) {
