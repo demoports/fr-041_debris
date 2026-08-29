@@ -189,8 +189,12 @@
     if (Math.abs(x) < 1e-6 && Math.abs(y) < 1e-6 && Math.abs(z) < 1e-6) {
       return mat4Identity(out);
     }
-    const tau = Math.PI * 2;
-    return mat4Euler(mulF(x, tau), mulF(y, tau), mulF(z, tau), out);
+    return mat4Euler(
+      mulF(x, SSE_TWO_PI),
+      mulF(y, SSE_TWO_PI),
+      mulF(z, SSE_TWO_PI),
+      out,
+    );
   }
 
   function mat4SRT(srt, out = new Float32Array(16)) {

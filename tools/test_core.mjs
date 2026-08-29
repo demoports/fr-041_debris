@@ -43,6 +43,18 @@ assert.deepEqual(Array.from(sseSinCos(-Math.PI / 2), f32ToBits),
   [3212836845, 3019898880]);
 assert.equal(rotated[2], 0.9999977350234985);
 
+// Released InitEulerPI2 loads its 2*pi multiplier from a dword constant before
+// multiplying the authored float turns. Operation 3337's 0.2998046875-turn Y
+// rotation distinguishes that path from multiplying by JavaScript's binary64
+// Math.PI * 2 and narrowing only the product.
+const productionRotation = mat4EulerTurns(new Float32Array([0, 0.2998046875, 0]));
+assert.deepEqual(Array.from(productionRotation, f32ToBits), [
+  0xbe9d9e74, 0x80000000, 0xbf739136, 0,
+  0, 0x3f7fffda, 0x80000000, 0,
+  0x3f739112, 0, 0xbe9d9e74, 0,
+  0, 0, 0, 0x3f800000,
+]);
+
 assert.deepEqual(Array.from(mat4MulA(srt, identity)), Array.from(srt));
 
 // UnitSafe3 compares squared length against 1e-20 and falls back to +X.
