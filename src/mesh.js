@@ -126,6 +126,165 @@ import {
     return slot;
   }
 
+  function materialCastsShadow(slot) {
+    let material = slot?.material ?? slot;
+    if (material?.Material !== undefined) material = material.Material;
+    return Boolean(material?.passes?.some(pass => pass?.usage === 'shadow'));
+  }
+
+  function shadowGroupKey(groups, casts) {
+    return groups.filter(group => casts(group.materialIndex | 0))
+      .map(group => `${group.start}:${group.count}`).join('|');
+  }
+
+  // EngMesh::PrepareJob(GenMesh*) serializes its shadow job while the complete
+  // half-edge mesh is still available. In particular, SilEdge keeps both
+  // explicit face slots even when one face was deleted or uses a material
+  // without a shadow pass. Preserve that job as flat arrays before immutable
+  // playback releases the authoring topology; reconstructing it later from
+  // render triangles loses those neighbours.
+  function prepareLegacyShadowRecipe(mesh, positions, shadowVertexMap, groups, source) {
+    const casts = materialIndex => materialCastsShadow(mesh.materials[materialIndex]);
+    const groupKey = shadowGroupKey(groups, casts);
+    if (!groupKey) return null;
+
+    const facePlane = new Uint32Array(source.faceCount);
+    const faceHalfedges = new Array(source.faceCount);
+    let casterCount = 0;
+    for (let face = 0; face < source.faceCount; face++) {
+      // Native assigns Temp before testing this face, and advances faceCount
+      // only for casters. A non-caster therefore aliases the next caster's
+      // plane through Temp+1.
+      facePlane[face] = casterCount + 1;
+      if (!source.faceUsed(face) || !casts(source.faceMaterial(face))) continue;
+      const start = source.faceEdge(face);
+      if (start < 0) continue;
+      const loop = [];
+      let halfedge = start;
+      const limit = source.edgeCount * 2 + 1;
+      do {
+        loop.push(halfedge);
+        halfedge = source.nextHalfedge(halfedge);
+        if (loop.length > limit) throw new Error('broken GenMesh shadow face loop');
+      } while (halfedge !== start);
+      if (loop.length < 3) continue;
+      faceHalfedges[face] = loop;
+      casterCount++;
+    }
+    if (!casterCount) return null;
+
+    // Canonicalising wedge vertices is coordinate-exact for this static mesh:
+    // shadowVertexMap points at GenMesh::Vert.First, whose position is what the
+    // prepared vertex stream already uses. It avoids retaining native job
+    // vertices that differ only in normal/UV data the shadow shader ignores.
+    const canonicalUsed = new Uint8Array(source.vertexCount);
+    for (let face = 0; face < source.faceCount; face++) {
+      const loop = faceHalfedges[face];
+      if (!loop) continue;
+      for (const halfedge of loop) {
+        const vertex = source.halfedgeVertex(halfedge);
+        const canonical = shadowVertexMap[vertex];
+        if (canonical < source.vertexCount) canonicalUsed[canonical] = 1;
+      }
+    }
+    let vertexCount = 0;
+    for (const used of canonicalUsed) vertexCount += used;
+    const sourceIndices = new Uint32Array(vertexCount);
+    const sourceToShadow = new Int32Array(source.vertexCount);
+    sourceToShadow.fill(-1);
+    for (let sourceIndex = 0, target = 0; sourceIndex < source.vertexCount; sourceIndex++) {
+      if (!canonicalUsed[sourceIndex]) continue;
+      sourceIndices[target] = sourceIndex;
+      sourceToShadow[sourceIndex] = target++;
+    }
+    const shadowIndex = vertex => sourceToShadow[shadowVertexMap[vertex]];
+
+    const planeCount = casterCount + 1;
+    const planes = new Float32Array(planeCount * 4);
+    const faces = [];
+    const trianglePlanes = [];
+    const calculatePlane = (loop, plane) => {
+      let nx = 0, ny = 0, nz = 0, length = 0;
+      for (let corner = 0; corner < loop.length; corner++) {
+        const previousVertex = source.halfedgeVertex(loop[(corner + loop.length - 1) % loop.length]);
+        const currentVertex = source.halfedgeVertex(loop[corner]);
+        const nextVertex = source.halfedgeVertex(loop[(corner + 1) % loop.length]);
+        const previous = previousVertex * 3, current = currentVertex * 3, next = nextVertex * 3;
+        const t1x = f32(positions[current] - positions[previous]);
+        const t1y = f32(positions[current + 1] - positions[previous + 1]);
+        const t1z = f32(positions[current + 2] - positions[previous + 2]);
+        const t2x = f32(positions[next] - positions[previous]);
+        const t2y = f32(positions[next + 1] - positions[previous + 1]);
+        const t2z = f32(positions[next + 2] - positions[previous + 2]);
+        nx = f32(f32(t1y * t2z) - f32(t1z * t2y));
+        ny = f32(f32(t1z * t2x) - f32(t1x * t2z));
+        nz = f32(f32(t1x * t2y) - f32(t1y * t2x));
+        length = f32(f32(f32(nx * nx) + f32(ny * ny)) + f32(nz * nz));
+        if (!(length > 1e-40)) break;
+      }
+      if (length >= 1e-40) {
+        const inverseLength = f32(1 / Math.sqrt(length));
+        nx = f32(nx * inverseLength); ny = f32(ny * inverseLength); nz = f32(nz * inverseLength);
+      } else { nx = 1; ny = 0; nz = 0; }
+      const origin = source.halfedgeVertex(loop[0]) * 3;
+      const offset = plane * 4;
+      planes[offset] = nx; planes[offset + 1] = ny; planes[offset + 2] = nz;
+      planes[offset + 3] = f32(-f32(f32(f32(nx * positions[origin]) +
+        f32(ny * positions[origin + 1])) + f32(nz * positions[origin + 2])));
+    };
+    for (let face = 0; face < source.faceCount; face++) {
+      const loop = faceHalfedges[face];
+      if (!loop) continue;
+      const plane = facePlane[face];
+      calculatePlane(loop, plane);
+      const first = shadowIndex(source.halfedgeVertex(loop[0]));
+      for (let corner = 2; corner < loop.length; corner++) {
+        faces.push(first,
+          shadowIndex(source.halfedgeVertex(loop[corner - 1])),
+          shadowIndex(source.halfedgeVertex(loop[corner])));
+        trianglePlanes.push(plane);
+      }
+    }
+
+    const edgeSeen = new Uint8Array(source.edgeCount);
+    const edgeVertices = [];
+    const edgePlanes = [];
+    let trailingPlaneSlots = 0;
+    for (let face = 0; face < source.faceCount; face++) {
+      const loop = faceHalfedges[face];
+      if (!loop) continue;
+      for (const halfedge of loop) {
+        const edge = halfedge >> 1;
+        if (edgeSeen[edge]) continue;
+        edgeSeen[edge] = 1;
+        edgeVertices.push(
+          shadowIndex(source.halfedgeVertex(halfedge)),
+          shadowIndex(source.halfedgeVertex(source.nextHalfedge(halfedge))),
+        );
+        let plane0 = facePlane[source.halfedgeFace(halfedge)];
+        let plane1 = facePlane[source.halfedgeFace(halfedge ^ 1)];
+        // Temp+1 after the final caster addresses native scratch state beyond
+        // this job's PlaneCount. No production Debris caster depends on it;
+        // classify such genuinely undefined slots as the reserved front plane.
+        if (plane0 >= planeCount) { plane0 = 0; trailingPlaneSlots++; }
+        if (plane1 >= planeCount) { plane1 = 0; trailingPlaneSlots++; }
+        edgePlanes.push(plane0, plane1);
+      }
+    }
+
+    return {
+      kind: 'genmesh-shadow-job', groupKey,
+      sourceIndices,
+      faces: new Uint32Array(faces),
+      trianglePlanes: new Uint32Array(trianglePlanes),
+      planes,
+      edgeVertices: new Uint32Array(edgeVertices),
+      edgePlanes: new Uint32Array(edgePlanes),
+      planeCount,
+      trailingPlaneSlots,
+    };
+  }
+
   function selElem(record, mask, state, mode) {
     mask &= 255;
     let value = record.mask & 255;
@@ -453,12 +612,24 @@ import {
         start, count: list.length,
       });
     }
+    const nativeShadow = prepareLegacyShadowRecipe(mesh, positions, shadowVertexMap, groups, {
+      vertexCount: storage.vertexCount,
+      edgeCount: storage.edgeCount,
+      faceCount: storage.faceCount,
+      faceMaterial: face => storage.faceInts[face * 5],
+      faceEdge: face => storage.faceInts[face * 5 + 1],
+      faceUsed: face => storage.faceBytes[face * 4 + 3] !== 0,
+      nextHalfedge: halfedge => storage.edgeInts[(halfedge >> 1) * 11 + (halfedge & 1)],
+      halfedgeFace: halfedge => storage.edgeInts[(halfedge >> 1) * 11 + 4 + (halfedge & 1)],
+      halfedgeVertex: halfedge => storage.edgeInts[(halfedge >> 1) * 11 + 6 + (halfedge & 1)],
+    });
     return {
       kind: 'mesh-buffer', positions, normals, tangents, colors, uvs, uv1s,
       indices: new Uint32Array(indexValues),
       triangleMaterials: new Uint16Array(triangleMaterials),
       shadowVertexMap, shadowTriangleMask: new Uint8Array(shadowTriangleValues),
       shadowFaceMap: new Uint32Array(shadowFaceValues),
+      nativeShadow,
       groups, materials: mesh.materials, bounds: compactBounds(storage, true),
     };
   }
@@ -1453,12 +1624,24 @@ import {
           start, count: list.length,
         });
       }
+      const nativeShadow = prepareLegacyShadowRecipe(this, positions, shadowVertexMap, groups, {
+        vertexCount: this.vertices.length,
+        edgeCount: this.edges.length,
+        faceCount: this.faces.length,
+        faceMaterial: face => this.faces[face].material,
+        faceEdge: face => this.faces[face].edge,
+        faceUsed: face => this.faces[face].used,
+        nextHalfedge: halfedge => this.nextFaceEdge(halfedge),
+        halfedgeFace: halfedge => this.getFaceId(halfedge),
+        halfedgeVertex: halfedge => this.getVertId(halfedge),
+      });
       const prepared = this._prepared = {
         kind: 'mesh-buffer', positions, normals, tangents, colors, uvs, uv1s,
         indices: new Uint32Array(indexValues),
         triangleMaterials: new Uint16Array(triangleMaterials),
         shadowVertexMap, shadowTriangleMask: new Uint8Array(shadowTriangleValues),
         shadowFaceMap: new Uint32Array(shadowFaceValues),
+        nativeShadow,
         groups, materials: this.materials, bounds: this.bounds(true),
       };
       // Renderer buffers are now self-contained. Return topology to dormant
@@ -1632,6 +1815,11 @@ import {
     let vertices = 0, edges = 0, faces = 0, compactBytes = 0, preparedBytes = 0;
     const compactBuffers = new Set();
     const preparedBuffers = new Set();
+    const countPreparedBuffer = value => {
+      if (!ArrayBuffer.isView(value) || !value.buffer || preparedBuffers.has(value.buffer)) return;
+      preparedBuffers.add(value.buffer);
+      preparedBytes += value.buffer.byteLength;
+    };
     for (const mesh of meshes) {
       const storage = mesh.storageSummary();
       vertices += storage.vertices;
@@ -1640,9 +1828,9 @@ import {
       for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(mesh._prepared || {}))) {
         if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) continue;
         const value = descriptor.value;
-        if (ArrayBuffer.isView(value) && value.buffer && !preparedBuffers.has(value.buffer)) {
-          preparedBuffers.add(value.buffer);
-          preparedBytes += value.buffer.byteLength;
+        countPreparedBuffer(value);
+        if (value === mesh._prepared?.nativeShadow) {
+          for (const nested of Object.values(value || {})) countPreparedBuffer(nested);
         }
       }
       if (storage.released) released++;

@@ -6,6 +6,7 @@ import { KC_MINMESH } from './abi.js';
 import {
   Random,
   f32,
+  f32ToBits,
   mat4Euler,
   mat4EulerTurns,
   mat4Identity,
@@ -324,6 +325,196 @@ function compactMinMeshBounds(storage) {
   return { minimum, maximum };
 }
 
+function minMeshMaterialCastsShadow(cluster) {
+  let material = cluster?.material ?? cluster;
+  if (material?.Material !== undefined) material = material.Material;
+  return Boolean(material?.passes?.some(pass => pass?.usage === 'shadow'));
+}
+
+function minMeshShadowGroupKey(groups, clusters) {
+  return groups.filter(group => minMeshMaterialCastsShadow(clusters[group.cluster | 0]))
+    .map(group => `${group.start}:${group.count}`).join('|');
+}
+
+function heapSortMinMeshEdges(edges, edgeCount) {
+  const less = (left, right) => {
+    const a = left * 3, b = right * 3;
+    return edges[a + 1] < edges[b + 1] ||
+      edges[a + 1] === edges[b + 1] && edges[a + 2] < edges[b + 2];
+  };
+  const siftDown = (count, root) => {
+    const source = root * 3;
+    const faceVert = edges[source], v0 = edges[source + 1], v1 = edges[source + 2];
+    while (root < (count >> 1)) {
+      let child = root * 2 + 1;
+      if (child + 1 < count && less(child, child + 1)) child++;
+      const offset = child * 3;
+      if (!(v0 < edges[offset + 1] ||
+          v0 === edges[offset + 1] && v1 < edges[offset + 2])) break;
+      const target = root * 3;
+      edges[target] = edges[offset];
+      edges[target + 1] = edges[offset + 1];
+      edges[target + 2] = edges[offset + 2];
+      root = child;
+    }
+    const target = root * 3;
+    edges[target] = faceVert; edges[target + 1] = v0; edges[target + 2] = v1;
+  };
+  for (let root = (edgeCount >> 1) - 1; root >= 0; root--) siftDown(edgeCount, root);
+  for (let count = edgeCount; --count > 0;) {
+    const tail = count * 3;
+    const faceVert = edges[tail], v0 = edges[tail + 1], v1 = edges[tail + 2];
+    edges[tail] = edges[0]; edges[tail + 1] = edges[1]; edges[tail + 2] = edges[2];
+    edges[0] = faceVert; edges[1] = v0; edges[2] = v1;
+    siftDown(count, 0);
+  }
+}
+
+// FromGenMinMesh calls CalcAdjacency immediately before PrepareJob. Recreate
+// its comparison-only heap sort and pair equal incidences two at a time, then
+// serialize the resulting SilEdge table while all source faces (including
+// non-casters) are still present. An undirected Map cannot represent the two
+// independent native edges produced by a four-incidence key.
+function prepareMinMeshShadowRecipe(storage, shadowVertexMap, groups) {
+  const clusters = storage.clusters;
+  const groupKey = minMeshShadowGroupKey(groups, clusters);
+  if (!groupKey) return null;
+  const casts = cluster => minMeshMaterialCastsShadow(clusters[cluster]);
+  const faceSelected = new Uint8Array(storage.faceCount);
+  const facePlane = new Uint32Array(storage.faceCount);
+  let casterCount = 0;
+  for (let face = 0; face < storage.faceCount; face++) {
+    const offset = face * 4;
+    const count = storage.faceInts[offset + 1];
+    const cluster = storage.faceInts[offset + 2];
+    if (count < 3 || storage.faceFlags[face] & 1 || !casts(cluster)) continue;
+    faceSelected[face] = 1;
+    facePlane[face] = ++casterCount;
+  }
+  if (!casterCount) return null;
+
+  let incidenceCount = 0;
+  for (let face = 0; face < storage.faceCount; face++) {
+    const count = storage.faceInts[face * 4 + 1];
+    if (count >= 3) incidenceCount += count;
+  }
+  const sortedEdges = new Int32Array(incidenceCount * 3);
+  let incidence = 0;
+  for (let face = 0; face < storage.faceCount; face++) {
+    const count = storage.faceInts[face * 4 + 1];
+    if (count < 3) continue;
+    if (count > 8) throw new RangeError('GenMinMesh shadow face exceeds native adjacency tag width');
+    const start = storage.faceVertexOffsets[face];
+    for (let corner = 0; corner < count; corner++) {
+      const offset = incidence++ * 3;
+      let v0 = shadowVertexMap[storage.faceVertices[start + corner]];
+      let v1 = shadowVertexMap[storage.faceVertices[start + (corner + 1) % count]];
+      if (v0 > v1) { const swap = v0; v0 = v1; v1 = swap; }
+      sortedEdges[offset] = face * 8 + corner;
+      sortedEdges[offset + 1] = v0;
+      sortedEdges[offset + 2] = v1;
+    }
+  }
+  heapSortMinMeshEdges(sortedEdges, incidenceCount);
+
+  const adjacency = new Int32Array(storage.faceVertices.length);
+  adjacency.fill(-1);
+  const connect = (first, second = -1) => {
+    if (second < 0) return;
+    const face0 = first >> 3, corner0 = first & 7;
+    const face1 = second >> 3, corner1 = second & 7;
+    adjacency[storage.faceVertexOffsets[face0] + corner0] = second;
+    adjacency[storage.faceVertexOffsets[face1] + corner1] = first;
+  };
+  let last0 = -1, last1 = -1, pending = -1, sourceNonManifoldEdges = 0;
+  let runLength = 0;
+  for (let index = 0; index < incidenceCount; index++) {
+    const offset = index * 3;
+    const faceVert = sortedEdges[offset], v0 = sortedEdges[offset + 1], v1 = sortedEdges[offset + 2];
+    if (v0 === last0 && v1 === last1) {
+      runLength++;
+      if (pending < 0) pending = faceVert;
+      else { connect(pending, faceVert); pending = -1; }
+    } else {
+      if (runLength > 2) sourceNonManifoldEdges++;
+      last0 = v0; last1 = v1; runLength = 1; pending = faceVert;
+    }
+  }
+  if (runLength > 2) sourceNonManifoldEdges++;
+
+  const canonicalUsed = new Uint8Array(storage.vertexCount);
+  for (let face = 0; face < storage.faceCount; face++) {
+    if (!faceSelected[face]) continue;
+    const start = storage.faceVertexOffsets[face];
+    const count = storage.faceInts[face * 4 + 1];
+    for (let corner = 0; corner < count; corner++) {
+      canonicalUsed[shadowVertexMap[storage.faceVertices[start + corner]]] = 1;
+    }
+  }
+  let vertexCount = 0;
+  for (const used of canonicalUsed) vertexCount += used;
+  const sourceIndices = new Uint32Array(vertexCount);
+  const sourceToShadow = new Int32Array(storage.vertexCount);
+  sourceToShadow.fill(-1);
+  for (let source = 0, target = 0; source < storage.vertexCount; source++) {
+    if (!canonicalUsed[source]) continue;
+    sourceIndices[target] = source;
+    sourceToShadow[source] = target++;
+  }
+  const shadowIndex = vertex => sourceToShadow[shadowVertexMap[vertex]];
+
+  const planeCount = casterCount + 1;
+  const planes = new Float32Array(planeCount * 4);
+  const faces = [];
+  const trianglePlanes = [];
+  const edgeVertices = [];
+  const edgePlanes = [];
+  for (let face = 0; face < storage.faceCount; face++) {
+    if (!faceSelected[face]) continue;
+    const start = storage.faceVertexOffsets[face];
+    const count = storage.faceInts[face * 4 + 1];
+    const plane = facePlane[face];
+    const normal = face * 3;
+    const point = storage.faceVertices[start] * 17;
+    const planeOffset = plane * 4;
+    const nx = storage.faceNormals[normal];
+    const ny = storage.faceNormals[normal + 1];
+    const nz = storage.faceNormals[normal + 2];
+    planes[planeOffset] = nx; planes[planeOffset + 1] = ny; planes[planeOffset + 2] = nz;
+    planes[planeOffset + 3] = f32(-f32(f32(f32(nx * storage.vertexFloats[point]) +
+      f32(ny * storage.vertexFloats[point + 1])) + f32(nz * storage.vertexFloats[point + 2])));
+
+    const first = shadowIndex(storage.faceVertices[start]);
+    for (let corner = 2; corner < count; corner++) {
+      faces.push(first,
+        shadowIndex(storage.faceVertices[start + corner - 1]),
+        shadowIndex(storage.faceVertices[start + corner]));
+      trianglePlanes.push(plane);
+    }
+    for (let corner = 0; corner < count; corner++) {
+      const adjacentTag = adjacency[start + corner];
+      const adjacentFace = adjacentTag >> 3;
+      if (face >= adjacentFace) continue;
+      edgeVertices.push(
+        shadowIndex(storage.faceVertices[start + corner]),
+        shadowIndex(storage.faceVertices[start + (corner + 1) % count]),
+      );
+      edgePlanes.push(plane, adjacentFace >= 0 ? facePlane[adjacentFace] : 0);
+    }
+  }
+  return {
+    kind: 'genminmesh-shadow-job', groupKey,
+    sourceIndices,
+    faces: new Uint32Array(faces),
+    trianglePlanes: new Uint32Array(trianglePlanes),
+    planes,
+    edgeVertices: new Uint32Array(edgeVertices),
+    edgePlanes: new Uint32Array(edgePlanes),
+    planeCount,
+    sourceNonManifoldEdges,
+  };
+}
+
 // Everything except the three skinned T-space channels is invariant across
 // animated frames. Build those renderer buffers directly from compact storage
 // once, instead of expanding thousands of tiny vertex/face objects and
@@ -339,19 +530,10 @@ function compactPreparedTemplate(mesh, storage) {
   const shadowVertices = new Map();
   const floatWords = new Uint32Array(storage.vertexFloats.buffer,
     storage.vertexFloats.byteOffset, storage.vertexFloats.length);
-  const canonicalFloatWord = word => {
-    const magnitude = word & 0x7fffffff;
-    if (magnitude === 0) return 0; // String(-0) and String(+0) are both "0".
-    if ((magnitude & 0x7f800000) === 0x7f800000 && (magnitude & 0x007fffff)) {
-      return 0x7fc00000; // Every JavaScript NaN stringifies as the same key.
-    }
-    return word >>> 0;
-  };
   const sameShadowVertex = (a, b) => {
     const af = a * 17, bf = b * 17, ai = a * 4, bi = b * 4;
     for (const component of SHADOW_FLOAT_COMPONENTS) {
-      if (canonicalFloatWord(floatWords[af + component]) !==
-          canonicalFloatWord(floatWords[bf + component])) return false;
+      if (floatWords[af + component] !== floatWords[bf + component]) return false;
     }
     for (let bone = 0; bone < 4; bone++) {
       if (storage.vertexMatrices[ai + bone] !== storage.vertexMatrices[bi + bone]) return false;
@@ -377,7 +559,7 @@ function compactPreparedTemplate(mesh, storage) {
     colors[boneOffset + 3] = color >>> 24;
     let shadowHash = 0x811c9dc5;
     for (const component of SHADOW_POSITION_COMPONENTS) {
-      shadowHash = Math.imul(shadowHash ^ canonicalFloatWord(floatWords[floatOffset + component]),
+      shadowHash = Math.imul(shadowHash ^ floatWords[floatOffset + component],
         0x01000193) >>> 0;
     }
     for (let bone = 0; bone < 4; bone++) {
@@ -385,7 +567,7 @@ function compactPreparedTemplate(mesh, storage) {
         0x01000193) >>> 0;
     }
     for (const component of SHADOW_WEIGHT_COMPONENTS) {
-      shadowHash = Math.imul(shadowHash ^ canonicalFloatWord(floatWords[floatOffset + component]),
+      shadowHash = Math.imul(shadowHash ^ floatWords[floatOffset + component],
         0x01000193) >>> 0;
     }
     let bucket = shadowVertices.get(shadowHash);
@@ -454,6 +636,7 @@ function compactPreparedTemplate(mesh, storage) {
   const preparedClusters = clusters.map(cluster => makeCluster(
     cluster.material, cluster.renderPass, cluster.id, cluster.animType, cluster.animMatrix,
   ));
+  const nativeShadow = prepareMinMeshShadowRecipe(storage, shadowVertexMap, groups);
   return {
     kind: 'indexed-geometry', sourceKind: mesh.kind,
     uv0, uv1, uvs: uv0, colors, indices, boneWeights, boneIndices,
@@ -461,6 +644,7 @@ function compactPreparedTemplate(mesh, storage) {
     // EngMesh takes the GenMinMesh shadow plane straight from the stored
     // face normal (engine.cpp:3259-3262) rather than recomputing it.
     shadowFaceNormals: storage.faceNormals,
+    nativeShadow,
     materials: preparedClusters.map(cluster => cluster.material),
     clusters: preparedClusters,
     bounds: compactMinMeshBounds(storage),
@@ -1332,18 +1516,38 @@ class MinMesh {
     // while coincident skinned vertices with different deformation do not.
     const shadowVertexMap = new Uint32Array(count);
     const shadowVertices = new Map();
-    const cleanShadowValue = value => Object.is(value, -0) ? 0 : value;
+    const sameShadowVertex = (left, right) => {
+      const a = this.vertices[left], b = this.vertices[right];
+      for (let component = 0; component < 3; component++) {
+        if (f32ToBits(a.position[component]) !== f32ToBits(b.position[component])) return false;
+      }
+      for (let component = 0; component < 4; component++) {
+        if (a.matrices[component] !== b.matrices[component] ||
+            f32ToBits(a.weights[component]) !== f32ToBits(b.weights[component])) return false;
+      }
+      return true;
+    };
     const position = vector3(), normal = vector3(), tangent = vector3();
     for (let index = 0; index < count; index++) {
       const vertex = this.vertices[index];
       const p = vertex.position, m = vertex.matrices, w = vertex.weights;
-      const shadowKey = `${cleanShadowValue(p[0])},${cleanShadowValue(p[1])},${cleanShadowValue(p[2])}|` +
-        `${m[0]},${m[1]},${m[2]},${m[3]}|${cleanShadowValue(w[0])},${cleanShadowValue(w[1])},` +
-        `${cleanShadowValue(w[2])},${cleanShadowValue(w[3])}`;
-      const merged = shadowVertices.get(shadowKey);
+      let shadowHash = 0x811c9dc5;
+      for (let component = 0; component < 3; component++) {
+        shadowHash = Math.imul(shadowHash ^ f32ToBits(p[component]), 0x01000193) >>> 0;
+      }
+      for (let component = 0; component < 4; component++) {
+        shadowHash = Math.imul(shadowHash ^ m[component], 0x01000193) >>> 0;
+        shadowHash = Math.imul(shadowHash ^ f32ToBits(w[component]), 0x01000193) >>> 0;
+      }
+      let bucket = shadowVertices.get(shadowHash);
+      let merged;
+      if (bucket) for (const candidate of bucket) {
+        if (sameShadowVertex(candidate, index)) { merged = candidate; break; }
+      }
       if (merged === undefined) {
         shadowVertexMap[index] = index;
-        shadowVertices.set(shadowKey, index);
+        if (bucket) bucket.push(index);
+        else shadowVertices.set(shadowHash, [index]);
       } else shadowVertexMap[index] = merged;
       if (matrices && vertex.boneCount) {
         position.fill(0); normal.fill(0); tangent.fill(0);
@@ -3802,6 +4006,11 @@ function minMeshStorageStats(runtime) {
   let vertices = 0, faces = 0, bones = 0, compactBytes = 0, preparedBytes = 0;
   const compactBuffers = new Set();
   const preparedBuffers = new Set();
+  const countPreparedBuffer = value => {
+    if (!ArrayBuffer.isView(value) || !value.buffer || preparedBuffers.has(value.buffer)) return;
+    preparedBuffers.add(value.buffer);
+    preparedBytes += value.buffer.byteLength;
+  };
   const countCompactBuffers = value => {
     if (ArrayBuffer.isView(value)) {
       if (!compactBuffers.has(value.buffer)) {
@@ -3821,9 +4030,9 @@ function minMeshStorageStats(runtime) {
     for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(mesh._prepared || {}))) {
       if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) continue;
       const value = descriptor.value;
-      if (ArrayBuffer.isView(value) && value.buffer && !preparedBuffers.has(value.buffer)) {
-        preparedBuffers.add(value.buffer);
-        preparedBytes += value.buffer.byteLength;
+      countPreparedBuffer(value);
+      if (value === mesh._prepared?.nativeShadow) {
+        for (const nested of Object.values(value || {})) countPreparedBuffer(nested);
       }
     }
     if (storage.released) released++;

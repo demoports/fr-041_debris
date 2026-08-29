@@ -13,6 +13,7 @@ import {
   geometryTopologyStats,
   normalizePreparedGeometry,
   prepareShadowTopology,
+  shadowGroupsForGeometry,
 } from '../src/renderer.js';
 import * as RuntimeAPI from '../src/runtime.js';
 
@@ -159,6 +160,40 @@ for (const normal of cube.vertices.map(vertex => vertex.normal)) {
   assert.ok(Math.abs(Math.hypot(...normal) - 1) < 1e-6);
 }
 
+// CalcAdjacencyCore pairs an equal-key run two incidences at a time. Five
+// coincident quads therefore produce two independent SilEdges per perimeter
+// key; collapsing the run into one renderer Map entry loses half of them.
+const pairedIncidenceMesh = D.MinMesh_Grid(1, 1, 1);
+const pairedSourceFace = pairedIncidenceMesh.faces[0];
+for (let copy = 0; copy < 3; copy++) {
+  pairedIncidenceMesh.faces.push({
+    select: pairedSourceFace.select, count: pairedSourceFace.count,
+    cluster: pairedSourceFace.cluster, temp: pairedSourceFace.temp,
+    normal: new Float32Array(pairedSourceFace.normal), flags: pairedSourceFace.flags,
+    vertices: pairedSourceFace.vertices.slice(),
+    adjacent: new Array(pairedSourceFace.count).fill(-1),
+  });
+}
+pairedIncidenceMesh.clusters[1].material = {
+  kind: 'material', passes: [{ usage: 'shadow' }],
+};
+pairedIncidenceMesh.invalidate();
+const pairedPrepared = pairedIncidenceMesh.prepare();
+assert.equal(pairedPrepared.nativeShadow.sourceNonManifoldEdges, 4,
+  'all four welded perimeter keys retain their native multi-pair run');
+assert.equal(pairedPrepared.nativeShadow.edgeVertices.length / 2, 8,
+  'native heap pairing serializes two SilEdges for each key');
+const pairedGeometry = D.normalizePreparedGeometry(pairedIncidenceMesh);
+const pairedGroups = shadowGroupsForGeometry(pairedGeometry);
+const pairedTopology = D.prepareShadowTopology(pairedGeometry, pairedGroups);
+assert.equal(pairedTopology.nativeShadow, true);
+assert.equal(pairedTopology.edgeCount, 8);
+const collapsedTopology = D.prepareShadowTopology(
+  { ...pairedGeometry, nativeShadow: null }, pairedGroups);
+assert.equal(collapsedTopology.edges.length, 4,
+  'triangle reconstruction demonstrates the formerly collapsed result');
+assert.equal(collapsedTopology.nonManifoldEdges, 4);
+
 const weightedSeam = D.MinMesh_Cube(1, 1, 1, 0, identitySRT);
 const firstPosition = weightedSeam.vertices[0].position;
 const duplicateIndex = weightedSeam.vertices.findIndex((vertex, index) => index > 0 &&
@@ -169,6 +204,23 @@ weightedSeam.vertices[duplicateIndex].matrices[0] = 7;
 const weightedMap = weightedSeam.prepare().shadowVertexMap;
 assert.notEqual(weightedMap[0], weightedMap[duplicateIndex],
   'coincident vertices with different skinning remain separate like CalcMergeVerts');
+
+// CalcMergeVerts compares the raw position/weight bytes with sCmpMem. +0 and
+// -0 are numerically equal but therefore remain distinct shadow vertices.
+const signedZeroSeam = D.MinMesh_Cube(1, 1, 1, 0, identitySRT);
+const signedZeroFirst = signedZeroSeam.vertices[0].position;
+const signedZeroDuplicate = signedZeroSeam.vertices.findIndex((vertex, index) => index > 0 &&
+  vertex.position.every((value, axis) => value === signedZeroFirst[axis]));
+assert.ok(signedZeroDuplicate > 0);
+signedZeroSeam.vertices[0].position[0] = 0;
+signedZeroSeam.vertices[signedZeroDuplicate].position[0] = -0;
+const signedZeroCompact = signedZeroSeam.clone().compact();
+const signedZeroExpandedMap = signedZeroSeam.prepare().shadowVertexMap;
+const signedZeroCompactMap = signedZeroCompact.prepare().shadowVertexMap;
+assert.notEqual(signedZeroExpandedMap[0], signedZeroExpandedMap[signedZeroDuplicate],
+  'expanded shadow welding preserves the sign bit of zero');
+assert.notEqual(signedZeroCompactMap[0], signedZeroCompactMap[signedZeroDuplicate],
+  'compact shadow welding preserves the sign bit of zero');
 
 const sphere = D.MinMesh_Sphere(8, 4);
 assert.equal(sphere.vertices.length, 47);

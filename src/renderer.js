@@ -1027,7 +1027,8 @@ function normalizePreparedGeometry(mesh, options) {
     source: prepared, positions, normals, uvs, uv1, tangents, colors, indices, groups,
     materials: prepared.materials || mesh?.materials || mesh?.Mtrl || [], vertexCount,
     shadowVertexMap, shadowTriangleMask, shadowFaceMap,
-    shadowFaceNormals: prepared.shadowFaceNormals || null, bounds,
+    shadowFaceNormals: prepared.shadowFaceNormals || null,
+    nativeShadow: prepared.nativeShadow || null, bounds,
     // Procedural producers can identify the buffers they changed without
     // forcing every static attribute and the index buffer back across the
     // WebGL boundary. Unknown producers omit this and retain the conservative
@@ -1304,6 +1305,10 @@ function geometryWarmupEstimateBytes(mesh) {
 function shadowTopologyBytes(topology) {
   return (topology?.positions?.byteLength || 0) + (topology?.faces?.byteLength || 0) +
     (topology?.sourceIndices?.byteLength || 0) +
+    (topology?.trianglePolygon?.byteLength || 0) +
+    (topology?.polygonPlanes?.byteLength || 0) +
+    (topology?.edgeVertices?.byteLength || 0) +
+    (topology?.edgePlanes?.byteLength || 0) +
     (topology?.volumePositions?.byteLength || 0) +
     (topology?.extrusions?.byteLength || 0);
 }
@@ -2955,11 +2960,65 @@ function weldKey(positions, index) {
   return `${x},${y},${z}`;
 }
 
+function prepareNativeShadowTopology(geometry, recipe) {
+  const sourceIndices = recipe.sourceIndices;
+  const canonical = new Float32Array(sourceIndices.length * 3);
+  for (let index = 0; index < sourceIndices.length; index++) {
+    const source = sourceIndices[index] * 3;
+    const target = index * 3;
+    canonical[target] = geometry.positions[source];
+    canonical[target + 1] = geometry.positions[source + 1];
+    canonical[target + 2] = geometry.positions[source + 2];
+  }
+  const volumePositions = new Float32Array(sourceIndices.length * 6);
+  const extrusions = new Uint8Array(sourceIndices.length * 2);
+  for (let index = 0; index < sourceIndices.length; index++) {
+    const source = index * 3, target = index * 6;
+    const x = canonical[source], y = canonical[source + 1], z = canonical[source + 2];
+    volumePositions[target] = volumePositions[target + 3] = x;
+    volumePositions[target + 1] = volumePositions[target + 4] = y;
+    volumePositions[target + 2] = volumePositions[target + 5] = z;
+    extrusions[index * 2 + 1] = 1;
+  }
+  const topology = {
+    nativeShadow: true,
+    positions: canonical,
+    sourceIndices,
+    usesShadowVertexMap: true,
+    faces: recipe.faces,
+    trianglePolygon: recipe.trianglePlanes,
+    polygonPlanes: recipe.planes.slice(),
+    polygonCount: recipe.planeCount,
+    planeCount: recipe.planeCount,
+    edgeVertices: recipe.edgeVertices,
+    edgePlanes: recipe.edgePlanes,
+    edgeCount: recipe.edgeVertices.length / 2,
+    boundaryEdges: 0,
+    nonManifoldEdges: 0,
+    windingConflictEdges: 0,
+    maxEdgeIncidence: recipe.edgeVertices.length ? 2 : 0,
+    sourceNonManifoldEdges: recipe.sourceNonManifoldEdges || 0,
+    trailingPlaneSlots: recipe.trailingPlaneSlots || 0,
+    volumePositions,
+    extrusions,
+  };
+  const positionsAreDynamic = geometry.dynamic &&
+    (!Array.isArray(geometry.dynamicAttributes) || geometry.dynamicAttributes.includes('positions'));
+  if (positionsAreDynamic && !refreshAnimatedShadowPlanes(topology)) {
+    throw new Error('animated native shadow topology has inconsistent face data');
+  }
+  return topology;
+}
+
 // The native shadow job is prepared once for the whole mesh, not once per
 // material. `groups` therefore contains every range whose material has an
 // MPP_SHADOW pass. Position welding recreates GenMesh's shared topology when
 // UV/normal wedges use separate render vertices at the same point.
 function prepareShadowTopology(geometry, groups = geometry.groups) {
+  const recipe = geometry.nativeShadow;
+  if (recipe && recipe.groupKey === shadowTopologyKey(groups)) {
+    return prepareNativeShadowTopology(geometry, recipe);
+  }
   const positions = geometry.positions;
   const indices = geometry.indices;
   const canonical = [];
@@ -3242,6 +3301,7 @@ function refreshedShadowTopologies(entry, normalized, dirty) {
       entry.shadowVertexMap !== normalized.shadowVertexMap ||
       entry.shadowTriangleMask !== normalized.shadowTriangleMask ||
       entry.shadowFaceMap !== normalized.shadowFaceMap ||
+      entry.nativeShadow !== normalized.nativeShadow ||
       !shadowGroupStructureMatches(entry.groups, normalized.groups)) return new Map();
   const positionsChanged = dirty.has('positions') || entry.positions !== normalized.positions;
   if (!positionsChanged) return previous;
@@ -3271,7 +3331,8 @@ function shadowScratchArray(scratch, key, Type, length) {
 
 function buildShadowVolume(geometry, groups, light, model = mat4Identity(), includeCaps = true,
     scratch = null) {
-  const topology = groups?.faces && groups?.edges ? groups : prepareShadowTopology(geometry, groups);
+  const topology = groups?.faces && (groups?.edges || groups?.edgeVertices)
+    ? groups : prepareShadowTopology(geometry, groups);
   const vertexCount = topology.positions.length / 3;
   const positions = topology.positions;
   const worldLightPosition = light?.position || light || [0, 0, 0];
@@ -3283,7 +3344,7 @@ function buildShadowVolume(geometry, groups, light, model = mat4Identity(), incl
   // Engine_::UpdateShadowCacheJob classifies one plane per source polygon
   // (engine.cpp:3584-3589), not one per fan triangle, so every triangle of a
   // polygon shares its front/back bit and its cap lands on one side.
-  const polygonCount = topology.polygonCount ?? (topology.faces.length / 3);
+  const polygonCount = topology.planeCount ?? topology.polygonCount ?? (topology.faces.length / 3);
   const planes = topology.polygonPlanes;
   const faceFront = shadowScratchArray(scratch, 'faceFront', Uint8Array, polygonCount);
   for (let polygon = 0; polygon < polygonCount; polygon++) {
@@ -3294,24 +3355,40 @@ function buildShadowVolume(geometry, groups, light, model = mat4Identity(), incl
   }
 
   const IndexType = vertexCount * 2 > 0xffff ? Uint32Array : Uint16Array;
-  const maximumIndexCount = topology.edges.length * 6 +
+  const edgeCount = topology.edgeCount ?? topology.edges.length;
+  const maximumIndexCount = edgeCount * 6 +
     (includeCaps ? topology.faces.length : 0);
   const indexValues = shadowScratchArray(scratch, 'indices', IndexType, maximumIndexCount);
   let indexCount = 0;
-  for (const records of topology.edges) {
-    const first = records[0];
-    const firstFront = Boolean(faceFront[first.face]);
-    const second = records[1] || null;
-    const secondFront = second ? Boolean(faceFront[second.face]) : true;
-    if (firstFront === secondFront) continue;
-    let a, b;
-    if (firstFront) { a = first.a; b = first.b; }
-    else if (second) { a = second.a; b = second.b; }
-    else { a = first.b; b = first.a; }
-    a *= 2; b *= 2;
-    indexValues[indexCount++] = a; indexValues[indexCount++] = b;
-    indexValues[indexCount++] = b + 1; indexValues[indexCount++] = a;
-    indexValues[indexCount++] = b + 1; indexValues[indexCount++] = a + 1;
+  if (topology.edgeVertices && topology.edgePlanes) {
+    for (let edge = 0; edge < edgeCount; edge++) {
+      const offset = edge * 2;
+      const firstFront = Boolean(faceFront[topology.edgePlanes[offset]]);
+      const secondFront = Boolean(faceFront[topology.edgePlanes[offset + 1]]);
+      if (firstFront === secondFront) continue;
+      let a = topology.edgeVertices[offset], b = topology.edgeVertices[offset + 1];
+      if (!firstFront) { const swap = a; a = b; b = swap; }
+      a *= 2; b *= 2;
+      indexValues[indexCount++] = a; indexValues[indexCount++] = b;
+      indexValues[indexCount++] = b + 1; indexValues[indexCount++] = a;
+      indexValues[indexCount++] = b + 1; indexValues[indexCount++] = a + 1;
+    }
+  } else {
+    for (const records of topology.edges) {
+      const first = records[0];
+      const firstFront = Boolean(faceFront[first.face]);
+      const second = records[1] || null;
+      const secondFront = second ? Boolean(faceFront[second.face]) : true;
+      if (firstFront === secondFront) continue;
+      let a, b;
+      if (firstFront) { a = first.a; b = first.b; }
+      else if (second) { a = second.a; b = second.b; }
+      else { a = first.b; b = first.a; }
+      a *= 2; b *= 2;
+      indexValues[indexCount++] = a; indexValues[indexCount++] = b;
+      indexValues[indexCount++] = b + 1; indexValues[indexCount++] = a;
+      indexValues[indexCount++] = b + 1; indexValues[indexCount++] = a + 1;
+    }
   }
   const silhouetteIndexCount = indexCount;
   if (includeCaps) {
@@ -3500,7 +3577,9 @@ class GeometryCache {
       for (const topology of entry.shadowTopologies?.values?.() || []) {
         shadowTopologies++;
         const bytes = countBytes(topology.positions) + countBytes(topology.faces) +
-          countBytes(topology.sourceIndices) + countBytes(topology.volumePositions) +
+          countBytes(topology.sourceIndices) + countBytes(topology.trianglePolygon) +
+          countBytes(topology.polygonPlanes) + countBytes(topology.edgeVertices) +
+          countBytes(topology.edgePlanes) + countBytes(topology.volumePositions) +
           countBytes(topology.extrusions);
         shadowBytes += bytes;
         diagnostics.shadowBoundaryEdges += topology.boundaryEdges || 0;

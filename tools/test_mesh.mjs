@@ -5,6 +5,7 @@ const handlers = new Map(Object.entries(MeshAPI.meshHandlers)
   .map(([id, handler]) => [Number(id), handler]));
 const D = { ...MeshAPI, handlers };
 const identitySRT = [1, 1, 1, 0, 0, 0, 0, 0, 0];
+const arrayBytes = value => new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 
 function invoke(id, parameters, inputs = [], links = []) {
   const handler = D.handlers.get(id);
@@ -120,6 +121,37 @@ assert.equal(prepared.shadowTriangleMask.length, prepared.indices.length / 3);
 assert.deepEqual(prepared.groups.map(group => [group.materialIndex, group.start, group.count]), [[1, 0, 36]]);
 assert.equal(cube.prepare(), prepared, 'prepare cache is stable');
 
+// Old EngMesh serializes both explicit face slots of every SilEdge. A deleted
+// neighbour before the next caster borrows that caster's Temp+1 plane instead
+// of becoming an open boundary. Keep the native job before topology release.
+const legacyShadowMaterial = { kind: 'material', passes: [{ usage: 'shadow' }] };
+const makeLegacyShadowBoundary = () => {
+  const mesh = D.Mesh_Cube(1, 1, 1, 0, identitySRT);
+  mesh.materials[1].material = legacyShadowMaterial;
+  const incident = mesh.edges[0].face;
+  const caster = Math.max(...incident);
+  for (const face of mesh.faces) face.material = 0;
+  mesh.faces[caster].material = 1;
+  return mesh;
+};
+const expandedLegacyShadow = makeLegacyShadowBoundary().prepare().nativeShadow;
+const compactLegacyMesh = makeLegacyShadowBoundary().compact();
+const compactLegacyPrepared = compactLegacyMesh.prepare({ releaseTopology: true });
+const compactLegacyShadow = compactLegacyPrepared.nativeShadow;
+assert.equal(compactLegacyShadow.kind, 'genmesh-shadow-job');
+assert.equal(compactLegacyShadow.planeCount, 2, 'reserved plane plus one caster plane');
+assert.ok(Array.from(compactLegacyShadow.edgePlanes)
+  .some((plane, index, values) => !(index & 1) && plane === 1 && values[index + 1] === 1),
+'deleted neighbour aliases the following caster plane');
+for (const key of ['sourceIndices', 'faces', 'trianglePlanes', 'planes',
+  'edgeVertices', 'edgePlanes']) {
+  assert.deepEqual(arrayBytes(compactLegacyShadow[key]), arrayBytes(expandedLegacyShadow[key]),
+    `compact GenMesh preserves native shadow ${key}`);
+}
+assert.equal(compactLegacyMesh.topologyReleasedForPlayback, true);
+assert.equal(compactLegacyPrepared.nativeShadow, compactLegacyShadow,
+  'released playback geometry retains its self-contained native shadow job');
+
 const playbackOnlyCube = D.Mesh_Cube(1, 1, 1, 0, identitySRT);
 playbackOnlyCube.compact();
 const playbackPrepared = playbackOnlyCube.prepare({ releaseTopology: true });
@@ -142,7 +174,6 @@ const preparedArrayKeys = [
   'positions', 'normals', 'tangents', 'colors', 'uvs', 'indices',
   'triangleMaterials', 'shadowVertexMap', 'shadowTriangleMask',
 ];
-const arrayBytes = value => new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 function assertPreparedEquivalent(actual, expected, label) {
   assert.equal(actual.kind, expected.kind, `${label} kind`);
   for (const key of preparedArrayKeys) {
@@ -167,6 +198,15 @@ function assertPreparedEquivalent(actual, expected, label) {
     expected.materials.map(slot => [slot.material, slot.pass | 0]),
     `${label} material slots`,
   );
+  assert.equal(actual.nativeShadow?.kind || null, expected.nativeShadow?.kind || null,
+    `${label} native shadow kind`);
+  if (actual.nativeShadow && expected.nativeShadow) {
+    for (const key of ['sourceIndices', 'faces', 'trianglePlanes', 'planes',
+      'edgeVertices', 'edgePlanes']) {
+      assert.deepEqual(arrayBytes(actual.nativeShadow[key]), arrayBytes(expected.nativeShadow[key]),
+        `${label} native shadow ${key}`);
+    }
+  }
 }
 
 function compareCompactPreparation(source, label, options = {}) {

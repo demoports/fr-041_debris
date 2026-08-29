@@ -2584,6 +2584,88 @@ assert.equal(volume.faceFront.length, 1);
 assert.equal(volume.silhouetteIndexCount, 18);
 assert.equal(volume.capIndexCount, 3);
 
+// Source mesh preparation can provide the exact native SilEdge table. Plane
+// zero is the always-front reserved slot; the fourth edge deliberately reads
+// the caster plane on both sides, matching an old GenMesh deleted-neighbour
+// Temp+1 alias and suppressing that otherwise-open boundary wall.
+const nativeShadowGeometry = {
+  positions: new Float32Array([
+    0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0,
+  ]),
+  indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+  groups: [{ start: 0, count: 6 }],
+  nativeShadow: {
+    kind: 'genmesh-shadow-job', groupKey: '0:6',
+    sourceIndices: new Uint32Array([0, 1, 2, 3]),
+    faces: new Uint32Array([0, 1, 2, 0, 2, 3]),
+    trianglePlanes: new Uint32Array([1, 1]),
+    planes: new Float32Array([0, 0, 0, 0, 0, 0, 1, 0]),
+    edgeVertices: new Uint32Array([0, 1, 1, 2, 2, 3, 3, 0]),
+    edgePlanes: new Uint32Array([1, 0, 1, 0, 1, 0, 1, 1]),
+    planeCount: 2,
+  },
+};
+const nativeTopology = D.prepareShadowTopology(
+  nativeShadowGeometry, nativeShadowGeometry.groups);
+assert.equal(nativeTopology.nativeShadow, true);
+assert.equal(nativeTopology.edgeCount, 4);
+const nativeVolume = D.buildShadowVolume(
+  nativeShadowGeometry, nativeTopology, [0.5, 0.5, -1]);
+assert.deepEqual(Array.from(nativeVolume.faceFront), [1, 0],
+  'reserved plane zero remains front while the caster faces away');
+assert.equal(nativeVolume.silhouetteIndexCount, 18,
+  'three explicit plane0 boundaries emit; the borrowed-plane edge does not');
+assert.equal(nativeVolume.capIndexCount, 6);
+
+// Animated native recipes keep their exact serialized edge topology while
+// refreshing current skinned positions and BoneData planes in place.
+const nativeAnimatedGeometry = {
+  kind: 'indexed-geometry', version: 0,
+  positions: new Float32Array([
+    0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0,
+  ]),
+  indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+  groups: [{ start: 0, count: 6 }],
+  shadowVertexMap: new Uint32Array([0, 1, 2, 3]),
+  dynamicAttributes: ['positions'],
+  nativeShadow: {
+    kind: 'genminmesh-shadow-job', groupKey: '0:6',
+    sourceIndices: new Uint32Array([0, 1, 2, 3]),
+    faces: new Uint32Array([0, 1, 2, 0, 2, 3]),
+    trianglePlanes: new Uint32Array([1, 1]),
+    // Deliberately stale/opposite: the first animated draw must replace it.
+    planes: new Float32Array([0, 0, 0, 0, 0, 0, -1, 7]),
+    edgeVertices: new Uint32Array([0, 1, 1, 2, 2, 3, 3, 0]),
+    edgePlanes: new Uint32Array([1, 0, 1, 0, 1, 0, 1, 0]),
+    planeCount: 2,
+  },
+};
+const nativeAnimatedCache = new D.GeometryCache(fakeGL, { instance: true });
+const nativeAnimatedEntry = nativeAnimatedCache.get(nativeAnimatedGeometry);
+const nativeAnimatedTopology = D.prepareShadowTopology(
+  nativeAnimatedEntry, nativeAnimatedEntry.groups);
+assert.deepEqual(Array.from(nativeAnimatedTopology.polygonPlanes), [0, 0, 0, 0, 0, -1, 1, -0],
+  'the first native animated draw derives its plane from current positions');
+nativeAnimatedEntry.shadowTopologies.set('0:6', nativeAnimatedTopology);
+const nativeAnimatedTopologyMap = nativeAnimatedEntry.shadowTopologies;
+nativeAnimatedGeometry.positions[8] = 2;
+nativeAnimatedGeometry.version++;
+assert.equal(nativeAnimatedCache.get(nativeAnimatedGeometry), nativeAnimatedEntry);
+assert.equal(nativeAnimatedEntry.shadowTopologies, nativeAnimatedTopologyMap);
+assert.equal(nativeAnimatedEntry.shadowTopologies.get('0:6'), nativeAnimatedTopology);
+assert.deepEqual(Array.from(nativeAnimatedTopology.positions), [
+  0, 0, 0, 1, 0, 0, 1, 1, 2, 0, 1, 0,
+]);
+assert.deepEqual(Array.from(nativeAnimatedTopology.volumePositions), [
+  0, 0, 0, 0, 0, 0,
+  1, 0, 0, 1, 0, 0,
+  1, 1, 2, 1, 1, 2,
+  0, 1, 0, 0, 1, 0,
+]);
+assert.deepEqual(Array.from(nativeAnimatedTopology.polygonPlanes), [0, 0, 0, 0, 0, -2, 1, -0],
+  'the reused native topology refreshes its current BoneData plane');
+nativeAnimatedCache.dispose();
+
 // Animated MinMesh keeps indices, weld maps and groups stable while skinning
 // positions in-place. Preserve its expensive edge topology and refresh the
 // canonical/doubled position arrays from the retained render-vertex sources.
