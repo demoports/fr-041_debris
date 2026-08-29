@@ -430,7 +430,7 @@ import { DebrisApp, telemetryPublishDue } from './src/app.js';
   button.addEventListener('click', begin);
   addEventListener('keydown', async event => {
     if (event.key === 'Escape') { if (app) finish(); return; }
-    if ((event.key === 'Enter' || event.key === ' ') && !app) { event.preventDefault(); begin(); return; }
+    if (event.key === ' ' && !app) { event.preventDefault(); begin(); return; }
     if (!app) return;
     if (event.key === ' ') { event.preventDefault(); flash(app.pause() ? 'paused' : 'playing'); }
     else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
