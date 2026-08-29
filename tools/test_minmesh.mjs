@@ -479,15 +479,15 @@ let multiplyTransform = D.mat4Identity();
 let multiplyLocal = D.mat4Identity();
 for (let copy = 0; copy < 4; copy++) {
   const expected = D.mat4TransformPoint(
-    D.mat4Mul(multiplyTransform, multiplyLocal), grid.vertices[0].position,
+    D.mat4MulA(multiplyLocal, multiplyTransform), grid.vertices[0].position,
   );
   assert.deepEqual(
     Array.from(multiplyOrderProbe.vertices[copy * grid.vertices.length].position),
     Array.from(expected.subarray(0, 3)),
     `Multiply copy ${copy} uses the native xform/local recurrence order`,
   );
-  multiplyTransform = D.mat4Mul(multiplyStep, multiplyTransform);
-  multiplyLocal = D.mat4Mul(multiplyLocalStep, multiplyLocal);
+  multiplyTransform = D.mat4MulA(multiplyTransform, multiplyStep);
+  multiplyLocal = D.mat4MulA(multiplyLocal, multiplyLocalStep);
 }
 
 // InitRandomSRT samples scale between identity and the authored value; it is

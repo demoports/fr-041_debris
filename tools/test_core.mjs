@@ -6,6 +6,8 @@ import {
   mat4Direction,
   mat4EulerTurns,
   mat4Identity,
+  mat4Mul,
+  mat4Mul3,
   mat4MulA,
   mat4SRT,
   mat4TransformPoint,
@@ -56,6 +58,74 @@ assert.deepEqual(Array.from(productionRotation, f32ToBits), [
 ]);
 
 assert.deepEqual(Array.from(mat4MulA(srt, identity)), Array.from(srt));
+
+// Direct released-executable oracles for sMatrix::Mul4 (0x811810) and MulA
+// (0x811a10), captured with the player's 0x103f x87 control word. Besides the
+// float32 boundaries, these inputs distinguish the compiler's row-specific
+// accumulation order.
+const nativeMatrixA = new Float32Array([
+  1.234567, -2.345678, 3.456789, -4.567891,
+  5.678912, -6.789123, 7.891234, -8.912345,
+  9.123456, -1.234568, 2.345679, -3.456791,
+  4.567912, -5.678923, 6.789134, -7.891245,
+]);
+const nativeMatrixB = new Float32Array([
+  -8.765432, 7.654321, -6.543219, 5.432198,
+  -4.321987, 3.219876, -2.198765, 1.987654,
+  -0.876543, 9.765432, -8.654321, 7.543219,
+  -6.432198, 5.321987, -4.219876, 3.198765,
+]);
+assert.deepEqual(Array.from(mat4Mul(nativeMatrixB, nativeMatrixA), f32ToBits), [
+  0x41cd5820, 0x4135800c, 0xc158f888, 0x41581fa3,
+  0x41efc968, 0x424cf3b8, 0xc253a8eb, 0x42417c45,
+  0xc259d389, 0x428cbc8f, 0xc27ac7f6, 0x4256f8de,
+  0x41ea7e24, 0x4223ec18, 0xc22b6e16, 0x421dfba7,
+]);
+assert.deepEqual(Array.from(mat4MulA(nativeMatrixA, nativeMatrixB), f32ToBits), [
+  0xc06daac2, 0x420e9db7, 0xc20358af, 0,
+  0xc1dad22d, 0x42c556ba, 0xc2b50c42, 0,
+  0xc29961f7, 0x42b187d2, 0xc29a90a4, 0,
+  0xc1df077e, 0x42b0996c, 0xc2a0c142, 0x3f800000,
+]);
+
+// sMatrix::Mul3 is a different executable routine (0x8135e0) whose
+// Scale3/AddScale3 stores preserve ordinary I,J,K accumulation order.
+const matrixFromBits = values => new Float32Array(Uint32Array.from(values).buffer);
+const nativeRotationA = matrixFromBits([
+  0x3dfcd6de, 0xbf43f35c, 0x3eaaaaaa, 0,
+  0xbf9e064b, 0x40161f97, 0xc05d3c08, 0,
+  0x40922c2a, 0xc0b5b9a6, 0x40d9407f, 0,
+  0, 0, 0, 0x3f800000,
+]);
+const nativeRotationB = matrixFromBits([
+  0xbf6b13f0, 0x3f53ce21, 0xbf3c8851, 0,
+  0x3fd2a140, 0xbfc6fe58, 0x3fbb5b70, 0,
+  0xc017dc44, 0x40120ad0, 0xc00c2a9d, 0,
+  0, 0, 0, 0x3f800000,
+]);
+assert.deepEqual(Array.from(mat4Mul3(nativeRotationA, nativeRotationB), f32ToBits), [
+  0xc00a7cb0, 0x4003603f, 0xbff87dc6, 0,
+  0x41532282, 0xc148e62d, 0x413e9d1a, 0,
+  0xc1ed30d4, 0x41e0cd0e, 0xc1d45cc3, 0,
+  0, 0, 0, 0x3f800000,
+]);
+
+// Two reachable party Scene edges expose MulA rounding in authored data.
+const scene3208 = mat4SRT(new Float32Array([1, 1, 1, 0, 0.5, 0, 0, 0, 18.25]));
+const scene3209 = mat4SRT(new Float32Array([
+  1, 1, 1, 0, 0.25, 0, -23.125, 27.5, -39,
+]));
+assert.equal(f32ToBits(mat4MulA(scene3208, scene3209)[12]), 0xc09c0084);
+const productionStack = new MatrixStack(scene3209);
+productionStack.pushMul(scene3208);
+assert.equal(f32ToBits(productionStack.top[12]), 0xc09c0084);
+const scene10845 = mat4SRT(new Float32Array([
+  1, 1, 1, 0, 0.25, 0, -16.5, 0, 0.75,
+]));
+const scene10846 = mat4SRT(new Float32Array([
+  1, 1, 1, 0, 0.5, 0, -12, 3.75, 26,
+]));
+assert.equal(f32ToBits(mat4MulA(scene10845, scene10846)[12]), 0x408fffb0);
 
 // UnitSafe3 compares squared length against 1e-20 and falls back to +X.
 // Keep it separate from Unit3-style call sites, which still normalize this

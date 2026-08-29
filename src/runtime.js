@@ -1,6 +1,14 @@
 // werkkzeug3 KX graph, animation, event, and spline runtime.
 import { CLASS_REGISTRY } from './classes.js';
-import { MatrixStack, Random, f32, f32ToBits, mat4Euler } from './core.js';
+import {
+  MatrixStack,
+  Random,
+  f32,
+  f32ToBits,
+  mat4Euler,
+  mat4Mul3,
+  mat4MulA,
+} from './core.js';
 import {
   KC_ANY,
   KC_BITMAP,
@@ -156,40 +164,6 @@ function identityMatrix(out = new Float32Array(16)) {
 
 function copyMatrix(source, out = new Float32Array(16)) {
   out.set(source);
-  return out;
-}
-
-// sMatrix::MulA(a,b): the source stores i,j,k,l as four consecutive vectors.
-function mulAffine(a, b, out = new Float32Array(16)) {
-  const target = out === a || out === b ? new Float32Array(16) : out;
-  for (let n = 0; n < 4; n++) {
-    const o = n * 4;
-    const ax = a[o], ay = a[o + 1], az = a[o + 2];
-    target[o] = f32(b[0] * ax + b[4] * ay + b[8] * az);
-    target[o + 1] = f32(b[1] * ax + b[5] * ay + b[9] * az);
-    target[o + 2] = f32(b[2] * ax + b[6] * ay + b[10] * az);
-    target[o + 3] = 0;
-  }
-  target[12] = f32(target[12] + b[12]);
-  target[13] = f32(target[13] + b[13]);
-  target[14] = f32(target[14] + b[14]);
-  target[15] = 1;
-  if (target !== out) out.set(target);
-  return out;
-}
-
-function mulRotation(a, b, out = new Float32Array(16)) {
-  const target = out === a || out === b ? new Float32Array(16) : out;
-  identityMatrix(target);
-  for (let n = 0; n < 3; n++) {
-    const o = n * 4;
-    const ax = a[o], ay = a[o + 1], az = a[o + 2];
-    target[o] = f32(b[0] * ax + b[4] * ay + b[8] * az);
-    target[o + 1] = f32(b[1] * ax + b[5] * ay + b[9] * az);
-    target[o + 2] = f32(b[2] * ax + b[6] * ay + b[10] * az);
-    target[o + 3] = 0;
-  }
-  if (target !== out) out.set(target);
   return out;
 }
 
@@ -759,8 +733,8 @@ class BlobSplinePath {
         const mx = initEuler(rx * TWO_PI, 0, 0, scratch?.mx);
         const my = initEuler(0, ry * TWO_PI, 0, scratch?.my);
         const mz = initEuler(0, 0, rz * TWO_PI, scratch?.mz);
-        const rotation = mulRotation(mz, mx, scratch?.rotation);
-        mulRotation(rotation, my, matrix);
+        const rotation = mat4Mul3(mz, mx, scratch?.rotation);
+        mat4Mul3(rotation, my, matrix);
         break;
       }
       default:
@@ -845,7 +819,7 @@ function pipeToSpline(pipe) {
     ac = clamp(ac, 1, -1);
     const angle = Math.acos(ac);
     const axis = cross3(matrix.subarray(8, 11), direction);
-    matrix = mulRotation(matrix, initAxisAngle(axis, angle));
+    matrix = mat4Mul3(matrix, initAxisAngle(axis, angle));
     const quaternion = quaternionFromMatrix(matrix);
     const oldPoint = [previous[0] + direction[0] * oldRadius,
       previous[1] + direction[1] * oldRadius, previous[2] + direction[2] * oldRadius];
@@ -996,9 +970,9 @@ class ShakerSpline {
         shake[12] = tx; shake[13] = ty; shake[14] = tz;
         if (this.mode & 16) {
           matrix[12] -= this.center[0]; matrix[13] -= this.center[1]; matrix[14] -= this.center[2];
-          mulAffine(matrix, shake, matrix);
+          mat4MulA(matrix, shake, matrix);
           matrix[12] += this.center[0]; matrix[13] += this.center[1]; matrix[14] += this.center[2];
-        } else mulAffine(shake, matrix, matrix);
+        } else mat4MulA(shake, matrix, matrix);
       }
       if (fakeMode) fakeMode = false;
       else event = event.nextOp;

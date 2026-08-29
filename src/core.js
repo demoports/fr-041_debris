@@ -135,14 +135,22 @@
     const t = out === a || out === b ? new Float32Array(16) : out;
     for (let column = 0; column < 4; column++) {
       const c = column * 4;
-      for (let row = 0; row < 4; row++) {
-        t[c + row] = f32(
-          a[row] * b[c] +
-          a[4 + row] * b[c + 1] +
-          a[8 + row] * b[c + 2] +
-          a[12 + row] * b[c + 3],
-        );
-      }
+      const x = b[c], y = b[c + 1], z = b[c + 2], w = b[c + 3];
+      // Released sMatrix::Mul4 keeps x87 at 24-bit precision and the compiler
+      // schedules each row in this exact order. Preserve every rounded multiply
+      // and add rather than evaluating one binary64 JavaScript dot product.
+      t[c] = addF(
+        addF(addF(mulF(a[4], y), mulF(a[12], w)), mulF(a[8], z)), mulF(a[0], x),
+      );
+      t[c + 1] = addF(
+        addF(addF(mulF(a[1], x), mulF(a[5], y)), mulF(a[13], w)), mulF(a[9], z),
+      );
+      t[c + 2] = addF(
+        addF(addF(mulF(a[6], y), mulF(a[14], w)), mulF(a[10], z)), mulF(a[2], x),
+      );
+      t[c + 3] = addF(
+        addF(addF(mulF(a[15], w), mulF(a[11], z)), mulF(a[3], x)), mulF(a[7], y),
+      );
     }
     if (t !== out) out.set(t);
     return out;
@@ -151,7 +159,41 @@
   // sMatrix::MulA(a,b): despite its name/argument order this is b * a in
   // the column-vector representation shared by WebGL.
   function mat4MulA(a, b, out = new Float32Array(16)) {
-    return mat4Mul(b, a, out);
+    const t = out === a || out === b ? new Float32Array(16) : out;
+    for (let column = 0; column < 4; column++) {
+      const c = column * 4;
+      const x = a[c], y = a[c + 1], z = a[c + 2];
+      // Exact 0x811a10 player schedule: X accumulates K,J,I while Y and Z
+      // accumulate I,K,J. The apparently unusual order is observable once the
+      // x87 control word narrows every arithmetic instruction to 24 bits.
+      t[c] = addF(addF(mulF(b[8], z), mulF(b[4], y)), mulF(b[0], x));
+      t[c + 1] = addF(addF(mulF(b[1], x), mulF(b[9], z)), mulF(b[5], y));
+      t[c + 2] = addF(addF(mulF(b[2], x), mulF(b[10], z)), mulF(b[6], y));
+      t[c + 3] = 0;
+    }
+    t[12] = addF(t[12], b[12]);
+    t[13] = addF(t[13], b[13]);
+    t[14] = addF(t[14], b[14]);
+    t[15] = 1;
+    if (t !== out) out.set(t);
+    return out;
+  }
+
+  // sMatrix::Mul3(a,b): b * a for the rotational 3x3 portion. The source uses
+  // Scale3 followed by two AddScale3 calls, each of which stores a float32.
+  function mat4Mul3(a, b, out = new Float32Array(16)) {
+    const t = out === a || out === b ? new Float32Array(16) : out;
+    mat4Identity(t);
+    for (let column = 0; column < 3; column++) {
+      const c = column * 4;
+      const x = a[c], y = a[c + 1], z = a[c + 2];
+      t[c] = addF(addF(mulF(b[0], x), mulF(b[4], y)), mulF(b[8], z));
+      t[c + 1] = addF(addF(mulF(b[1], x), mulF(b[5], y)), mulF(b[9], z));
+      t[c + 2] = addF(addF(mulF(b[2], x), mulF(b[6], y)), mulF(b[10], z));
+      t[c + 3] = 0;
+    }
+    if (t !== out) out.set(t);
+    return out;
   }
 
   // Matches sMatrix::InitEuler. Angles are radians and the basis vectors are
@@ -274,7 +316,7 @@
     pushMul(matrix) {
       // sMatrixStack::PushMul: MulA(matrix, top) == top * matrix.
       const next = this._acquire();
-      mat4Mul(this.top, matrix, next);
+      mat4MulA(matrix, this.top, next);
       this.stack.push(next);
       return this.top;
     }
@@ -368,6 +410,7 @@ export {
   mat4EulerTurns,
   mat4Identity,
   mat4Mul,
+  mat4Mul3,
   mat4MulA,
   mat4SRT,
   mat4TransformPoint,

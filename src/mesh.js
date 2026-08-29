@@ -4,7 +4,7 @@ import {
   mat4Euler,
   mat4EulerTurns,
   mat4Identity,
-  mat4Mul,
+  mat4MulA,
   mat4SRT,
 } from './core.js';
 
@@ -354,7 +354,7 @@ import {
     translate[12] = f32(-point[0]);
     translate[13] = f32(-point[1]);
     translate[14] = f32(-point[2]);
-    const result = mat4Mul(matrix, translate, new Float32Array(16));
+    const result = mat4MulA(translate, matrix, new Float32Array(16));
     result[12] = f32(result[12] + point[0]);
     result[13] = f32(result[13] + point[1]);
     result[14] = f32(result[14] + point[2]);
@@ -2265,7 +2265,7 @@ import {
           const pz = storage.vertexPositions[offset + 2];
           const translate = matrixIdentity();
           translate[12] = f32(-px); translate[13] = f32(-py); translate[14] = f32(-pz);
-          matrix = mat4Mul(matrix, translate, new Float32Array(16));
+          matrix = mat4MulA(translate, matrix, new Float32Array(16));
           matrix[12] = f32(matrix[12] + px);
           matrix[13] = f32(matrix[13] + py);
           matrix[14] = f32(matrix[14] + pz);
@@ -2722,12 +2722,13 @@ import {
         output.transformVertices(matrix, ATTR.NORMAL, ATTR.POS | 0x10, start, end);
       }
       output.transformVertices(
-        mat4Mul(transform, localTransform, new Float32Array(16)), ATTR.POS, ATTR.POS, start, end,
+        mat4MulA(localTransform, transform, new Float32Array(16)),
+        ATTR.POS, ATTR.POS, start, end,
       );
       transform = mode & 2
         ? randomSRT(random, srt)
-        : mat4Mul(step, transform, new Float32Array(16));
-      localTransform = mat4Mul(localStep, localTransform, new Float32Array(16));
+        : mat4MulA(transform, step, new Float32Array(16));
+      localTransform = mat4MulA(localTransform, localStep, new Float32Array(16));
       if (mode & 1) {
         const matrix = matrixIdentity();
         matrix[12] = f32(iteration * translateU);

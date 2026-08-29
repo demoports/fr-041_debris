@@ -10,7 +10,7 @@ import {
   mat4Euler,
   mat4EulerTurns,
   mat4Identity,
-  mat4Mul,
+  mat4MulA,
   mat4SRT,
 } from './core.js';
 import { FONT3D_FAMILIES } from './font3d_glyphs.js';
@@ -272,7 +272,7 @@ function rigidInverse(matrix, out = new Float32Array(16)) {
 }
 
 function matrixMul(a, b, out) {
-  return mat4Mul(a, b, out);
+  return mat4MulA(b, a, out);
 }
 
 function matrixSRT(values) {
